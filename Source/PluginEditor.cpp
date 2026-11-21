@@ -257,8 +257,11 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
     bypassButton.setClickingTogglesState(true);
-    bypassButton.onClick = [this] { bypassed = bypassButton.getToggleState(); };
     addAndMakeVisible(bypassButton);
+    bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(
+        *processor.apvts.getParameter("bypass"), bypassButton, nullptr);
+
+    setupKnob(inGain,        "in_gain",        "INPUT");
 
     setupKnob(gateThreshold, "gate_threshold", "THRESH");
     setupKnob(gateRelease,   "gate_release",   "RELEASE");
@@ -474,15 +477,15 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    // Franja inferior: INPUT a la izquierda, OUTPUT a la derecha
+    // Medidores de nivel (franja inferior)
     const int footerY = h - footerH + 10;
-    const juce::Rectangle<int> inMeter (pad, footerY, 200, 6);
-    const juce::Rectangle<int> outMeter(w - pad - 200, footerY, 200, 6);
+    const juce::Rectangle<int> inMeter (pad + 60, footerY, 160, 6);
+    const juce::Rectangle<int> outMeter(w - pad - 220, footerY, 200, 6);
 
     g.setColour(Neon::muted);
     g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
-    g.drawText("INPUT",  juce::Rectangle<int>(pad, footerY - 14, 60, 12), juce::Justification::left, false);
-    g.drawText("OUTPUT", juce::Rectangle<int>(w - pad - 60, footerY - 14, 60, 12), juce::Justification::right, false);
+    g.drawText("INPUT",  juce::Rectangle<int>(pad, footerY - 2, 56, 12), juce::Justification::left, false);
+    g.drawText("OUTPUT", juce::Rectangle<int>(w - pad - 60, footerY - 2, 60, 12), juce::Justification::right, false);
 
     drawMeter(g, inMeter,  inLevel);
     drawMeter(g, outMeter, outLevel);
@@ -539,4 +542,8 @@ void VoxStudioEditor::resized()
     auto p3 = innerRect(panelRect(3, w, h));
     const int knob = juce::jmin(p3.getWidth(), 90);
     placeKnob(outGain, p3.withSizeKeepingCentre(knob, knob + 16));
+
+    // INPUT: perilla pequeña en la franja inferior izquierda
+    inGain.slider.setBounds(pad, h - footerH - 6, 44, 44);
+    inGain.label.setBounds(pad, h - footerH + 36, 44, 12);
 }
