@@ -17,13 +17,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // Gate
+    params.push_back(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("in_gain", "Input",
+        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>("gate_threshold", "Gate Threshold",
         juce::NormalisableRange<float>(-80.0f, 0.0f, 0.1f), -50.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("gate_release", "Gate Release",
         juce::NormalisableRange<float>(5.0f, 500.0f, 0.1f, 0.4f), 80.0f));
 
-    // Compresor
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_threshold", "Threshold",
         juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -18.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_ratio", "Ratio",
@@ -35,7 +38,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_makeup", "Makeup",
         juce::NormalisableRange<float>(0.0f, 24.0f, 0.1f), 0.0f));
 
-    // EQ paramétrico: frecuencia, ganancia y Q por banda
     const float defFreq[] = { 120.0f, 500.0f, 2500.0f, 8000.0f };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
@@ -48,7 +50,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
             juce::NormalisableRange<float>(0.1f, 10.0f, 0.01f, 0.5f), 1.0f));
     }
 
-    // Reverb
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_room", "Room Size",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_damp", "Damping",
@@ -57,7 +58,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.25f));
     params.push_back(std::make_unique<juce::AudioParameterInt>("rev_preset", "Preset", 0, 4, 0));
 
-    // SFX
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_drive", "Drive",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_delay", "Delay Mix",
@@ -65,7 +65,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_delay_time", "Delay Time",
         juce::NormalisableRange<float>(10.0f, 1000.0f, 0.1f), 250.0f));
 
-    // Salida
     params.push_back(std::make_unique<juce::AudioParameterFloat>("out_gain", "Output",
         juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
 
@@ -79,6 +78,7 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
     spec.numChannels = 2;
 
+    inputGain.prepare(spec);
     compressor.prepare(spec);
     makeupGain.prepare(spec);
     outputGain.prepare(spec);
@@ -142,10 +142,10 @@ void VoxStudioProcessor::updateEq()
     for (int b = 0; b < numEqBands; ++b)
     {
         const juce::String n = "eq" + juce::String(b + 1) + "_";
-        const float freq = apvts.getRawParameterValue(n + "freq")->load();
+        const float freq   = apvts.getRawParameterValue(n + "freq")->load();
         const float gainDb = apvts.getRawParameterValue(n + "gain")->load();
-        const float q = apvts.getRawParameterValue(n + "q")->load();
-        const float gain = juce::Decibels::decibelsToGain(gainDb);
+        const float q      = apvts.getRawParameterValue(n + "q")->load();
+        const float gain   = juce::Decibels::decibelsToGain(gainDb);
 
         auto coeffs = juce::dsp::IIR::Coefficients<float>::makePeakFilter(currentSampleRate, freq, q, gain);
         *eqBands[(size_t) b].state = *coeffs;
@@ -231,13 +231,25 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     inputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
 
+    // Bypass: la señal pasa sin tocar
+    if (apvts.getRawParameterValue("bypass")->load() > 0.5f)
+    {
+        outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
+        return;
+    }
+
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> ctx(block);
+
+    // 0. Input (volumen de entrada)
+    inputGain.setGainDecibels(apvts.getRawParameterValue("in_gain")->load());
+    inputGain.process(ctx);
+
     // 1. Gate
     processDynamics(buffer);
 
     // 2. Compresor
     updateCompressor();
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> ctx(block);
     compressor.process(ctx);
 
     // 3. Makeup
@@ -249,7 +261,7 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (int b = 0; b < numEqBands; ++b)
         eqBands[(size_t) b].process(ctx);
 
-    // 5. SFX (saturación + delay)
+    // 5. SFX
     processSFX(buffer);
 
     // 6. Reverb
