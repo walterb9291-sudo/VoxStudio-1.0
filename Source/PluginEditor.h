@@ -13,6 +13,7 @@ public:
     void drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown,
                       int buttonX, int buttonY, int buttonW, int buttonH,
                       juce::ComboBox& box) override;
+    juce::Font getComboBoxFont(juce::ComboBox& box) override;
 };
 
 class VoxStudioEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -33,6 +34,7 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
 private:
@@ -56,15 +58,14 @@ private:
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
-    Knob inGain;
-    Knob gateThreshold, gateRelease;
+    Knob inGain, outGain;
     Knob compThreshold, compRatio, compAttack, compRelease, compMakeup;
     Knob eqFreq[VoxStudioProcessor::numEqBands];
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
-    Knob sfxDrive, sfxDelay, sfxDelayTime;
+    Knob sfxDrive;
+    Knob delayMix, delayTime;
     Knob revRoom, revDamp, revMix;
-    Knob outGain;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
