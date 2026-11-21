@@ -5,6 +5,10 @@ const juce::StringArray VoxStudioProcessor::reverbPresetNames {
     "Room", "Hall", "Plate", "Vocal Space", "Shimmer Air"
 };
 
+const juce::StringArray VoxStudioProcessor::delayDivisionNames {
+    "1/1", "1/2", "1/4", "1/8", "1/16", "1/4 dot", "1/8 dot", "1/4 trip"
+};
+
 VoxStudioProcessor::VoxStudioProcessor()
     : AudioProcessor(BusesProperties()
                         .withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -62,8 +66,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_delay", "Delay Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_delay_time", "Delay Time",
-        juce::NormalisableRange<float>(10.0f, 1000.0f, 0.1f), 250.0f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>("sfx_delay_div", "Delay Division",
+        delayDivisionNames, 2));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("out_gain", "Output",
         juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
@@ -174,13 +178,40 @@ void VoxStudioProcessor::processDynamics(juce::AudioBuffer<float>& buffer)
     }
 }
 
+double VoxStudioProcessor::delayTimeMs() const
+{
+    // Tempo del host; si no hay, 120 BPM
+    double bpm = 120.0;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            if (auto hostBpm = pos->getBpm())
+                if (*hostBpm > 20.0)
+                    bpm = *hostBpm;
+
+    const double quarterMs = 60000.0 / bpm;
+    const int idx = static_cast<int>(apvts.getRawParameterValue("sfx_delay_div")->load());
+
+    switch (idx)
+    {
+        case 0: return quarterMs * 4.0;        // 1/1
+        case 1: return quarterMs * 2.0;        // 1/2
+        case 2: return quarterMs;              // 1/4
+        case 3: return quarterMs * 0.5;        // 1/8
+        case 4: return quarterMs * 0.25;       // 1/16
+        case 5: return quarterMs * 1.5;        // 1/4 con puntillo
+        case 6: return quarterMs * 0.75;       // 1/8 con puntillo
+        case 7: return quarterMs * (2.0 / 3.0);// 1/4 de tresillo
+        default: return quarterMs;
+    }
+}
+
 void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
 {
     const float drive    = apvts.getRawParameterValue("sfx_drive")->load();
     const float delayMix = apvts.getRawParameterValue("sfx_delay")->load();
     const int   bufLen   = delayBuffer.getNumSamples();
-    int delaySamples = static_cast<int>(
-        apvts.getRawParameterValue("sfx_delay_time")->load() * 0.001f * (float) currentSampleRate);
+
+    int delaySamples = static_cast<int>(delayTimeMs() * 0.001 * currentSampleRate);
     delaySamples = juce::jlimit(1, bufLen - 1, delaySamples);
 
     const int numSamples = buffer.getNumSamples();
@@ -231,45 +262,49 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     inputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
 
-    // Bypass: la señal pasa sin tocar
     if (apvts.getRawParameterValue("bypass")->load() > 0.5f)
     {
         outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
+        gainReductionDb.store(0.0f);
         return;
     }
 
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::ProcessContextReplacing<float> ctx(block);
 
-    // 0. Input (volumen de entrada)
     inputGain.setGainDecibels(apvts.getRawParameterValue("in_gain")->load());
     inputGain.process(ctx);
 
-    // 1. Gate
     processDynamics(buffer);
 
-    // 2. Compresor
     updateCompressor();
     compressor.process(ctx);
 
-    // 3. Makeup
+    // Reducción de ganancia aproximada para la aguja del VU
+    {
+        const float peakIn  = juce::jmax(0.0001f, buffer.getMagnitude(0, buffer.getNumSamples()));
+        const float thrLin  = juce::Decibels::decibelsToGain(apvts.getRawParameterValue("comp_threshold")->load());
+        const float ratio   = apvts.getRawParameterValue("comp_ratio")->load();
+        const float levelDb = juce::Decibels::gainToDecibels(peakIn);
+        const float thrDb   = juce::Decibels::gainToDecibels(thrLin);
+        const float over    = juce::jmax(0.0f, levelDb - thrDb);
+        const float reduction = over - over / ratio;
+        gainReductionDb.store(reduction);
+    }
+
     makeupGain.setGainDecibels(apvts.getRawParameterValue("comp_makeup")->load());
     makeupGain.process(ctx);
 
-    // 4. EQ paramétrico
     updateEq();
     for (int b = 0; b < numEqBands; ++b)
         eqBands[(size_t) b].process(ctx);
 
-    // 5. SFX
     processSFX(buffer);
 
-    // 6. Reverb
     updateReverb();
     if (buffer.getNumChannels() >= 2)
         reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), buffer.getNumSamples());
 
-    // 7. Salida
     outputGain.setGainDecibels(apvts.getRawParameterValue("out_gain")->load());
     outputGain.process(ctx);
 
