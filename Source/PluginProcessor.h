@@ -35,12 +35,14 @@ public:
 
     void applyReverbPreset(int index);
     static const juce::StringArray reverbPresetNames;
+    static constexpr int numEqBands = 4;
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     void updateCompressor();
     void updateReverb();
+    void updateEq();
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
 
@@ -53,12 +55,23 @@ private:
     juce::Reverb reverb;
     juce::Reverb::Parameters reverbParams;
 
-    // Gate por canal
+    // EQ paramétrico: 4 bandas en estéreo
+    using Filter = juce::dsp::IIR::Filter<float>;
+    using FilterBand = juce::dsp::ProcessorDuplicator<Filter, juce::dsp::IIR::Coefficients<float>>;
+    std::array<FilterBand, numEqBands> eqBands;
+
     std::array<float, 2> gateEnvelope { 0.0f, 0.0f };
 
-    // Delay por canal
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
+
+    // Medidores (lectura desde el editor)
+    std::atomic<float> inputLevel { 0.0f };
+    std::atomic<float> outputLevel { 0.0f };
+
+public:
+    float getInputLevel() const { return inputLevel.load(); }
+    float getOutputLevel() const { return outputLevel.load(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoxStudioProcessor)
 };
