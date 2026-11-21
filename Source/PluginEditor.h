@@ -15,13 +15,6 @@ public:
 class VoxStudioEditor : public juce::AudioProcessorEditor
 {
 public:
-    explicit VoxStudioEditor(VoxStudioProcessor&);
-    ~VoxStudioEditor() override;
-
-    void paint(juce::Graphics&) override;
-    void resized() override;
-
-private:
     struct Knob
     {
         juce::Slider slider;
@@ -29,11 +22,17 @@ private:
         std::unique_ptr<juce::SliderParameterAttachment> attachment;
     };
 
+    explicit VoxStudioEditor(VoxStudioProcessor&);
+    ~VoxStudioEditor() override;
+
+    void paint(juce::Graphics&) override;
+    void resized() override;
+
+private:
     void setupKnob(Knob& k, const juce::String& paramID, const juce::String& text);
 
     VoxStudioProcessor& processor;
 
-    // Debe declararse antes de los controles para destruirse después de ellos
     RackLookAndFeel lnf;
 
     juce::Label title;
