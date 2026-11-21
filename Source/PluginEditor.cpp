@@ -134,7 +134,7 @@ namespace
         g.fillRoundedRectangle(r.toFloat().withWidth(fillW), 2.0f);
     }
 
-    // Medidor VU analógico dibujado en código: aguja según reducción de ganancia (dB)
+    // Medidor VU: escala con dB, aguja según reducción de ganancia
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
     {
         g.setColour(Neon::bg);
@@ -154,12 +154,19 @@ namespace
         g.strokePath(scale, juce::PathStrokeType(1.0f));
 
         const float marksDb[] = { 0.0f, -3.0f, -6.0f, -10.0f, -20.0f };
+        g.setFont(juce::FontOptions(7.5f, juce::Font::bold));
         for (float db : marksDb)
         {
             const float t = juce::jmap(-db, 0.0f, 20.0f, 0.0f, 1.0f);
             const float a = startA + t * (endA - startA);
+
             g.drawLine(cx + (radius - 2.0f) * std::sin(a), cy - (radius - 2.0f) * std::cos(a),
                        cx + (radius - 7.0f) * std::sin(a), cy - (radius - 7.0f) * std::cos(a), 1.0f);
+
+            const float lx = cx + (radius - 17.0f) * std::sin(a);
+            const float ly = cy - (radius - 17.0f) * std::cos(a);
+            g.drawText(juce::String((int) db), juce::Rectangle<float>(lx - 10.0f, ly - 6.0f, 20.0f, 12.0f),
+                       juce::Justification::centred, false);
         }
 
         const float t = juce::jlimit(0.0f, 1.0f, grDb / 20.0f);
@@ -170,8 +177,8 @@ namespace
 
         g.setColour(Neon::muted);
         g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
-        g.drawText("GR", juce::Rectangle<float>(r.getX(), r.getY() + 4.0f, r.getWidth(), 12.0f),
-                   juce::Justification::centred, false);
+        g.drawText("GR dB", juce::Rectangle<float>(r.getRight() - 48.0f, r.getY() + 3.0f, 42.0f, 12.0f),
+                   juce::Justification::right, false);
     }
 }
 
@@ -195,7 +202,7 @@ NeonLookAndFeel::NeonLookAndFeel()
 
 juce::Font NeonLookAndFeel::getComboBoxFont(juce::ComboBox&)
 {
-    return juce::Font(juce::FontOptions(12.0f));
+    return juce::Font(juce::FontOptions("Segoe UI", 12.5f, juce::Font::plain));
 }
 
 void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
@@ -262,10 +269,14 @@ void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int widt
 
     if (slider.getComponentID() == "readout")
     {
+        const juce::Rectangle<int> box((int) (cx - bodyR), (int) (cy - 14.0f), (int) (bodyR * 2.0f), 18);
         g.setColour(Neon::text);
-        g.setFont(juce::FontOptions(14.0f, juce::Font::bold));
-        g.drawText(juce::String(slider.getValue(), 1) + " dB",
-                   juce::Rectangle<int>((int) (cx - bodyR), (int) (cy - 9.0f), (int) (bodyR * 2.0f), 18),
+        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.drawText(juce::String(slider.getValue(), 1), box, juce::Justification::centred, false);
+
+        g.setColour(Neon::muted);
+        g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+        g.drawText("dB", juce::Rectangle<int>(box.getX(), box.getBottom(), box.getWidth(), 12),
                    juce::Justification::centred, false);
         return;
     }
@@ -397,7 +408,6 @@ void VoxStudioEditor::timerCallback()
     outLevel = juce::jmax(processor.getOutputLevel() * 0.9f, outLevel * 0.85f);
     grLevel  = juce::jmax(processor.getGainReduction() * 0.9f, grLevel * 0.85f);
 
-    // Resalta el botón de división activo
     const int activeDiv = (int) processor.apvts.getRawParameterValue("sfx_delay_div")->load();
     for (int i = 0; i < numDivButtons; ++i)
         divButtons[i].setToggleState(i == activeDiv, juce::dontSendNotification);
@@ -532,7 +542,7 @@ void VoxStudioEditor::paint(juce::Graphics& g)
 
     {
         auto p0 = panelRect(0, w, h).toFloat();
-        drawVuMeter(g, { p0.getX() + 14.0f, p0.getY() + 48.0f, p0.getWidth() - 28.0f, 52.0f }, grLevel);
+        drawVuMeter(g, { p0.getX() + 14.0f, p0.getY() + 48.0f, p0.getWidth() - 28.0f, 60.0f }, grLevel);
     }
 
     const auto area = eqArea();
@@ -657,14 +667,19 @@ void VoxStudioEditor::resized()
     placeKnob(revDamp, revCells[1]);
     placeKnob(revMix,  revCells[2]);
 
-    // DELAY: mezcla arriba, botones de división abajo
+    // DELAY: mezcla arriba, botones de división en 2 filas de 4 abajo
     auto p3 = innerRect(panelRect(3, w, h));
     auto top3 = p3.removeFromTop(120);
     placeKnob(delayMix, top3.reduced(40, 0));
-    auto divRow = p3.removeFromTop(44).reduced(2, 10);
-    const int dw = divRow.getWidth() / numDivButtons;
+    auto divArea = p3.removeFromTop(50).reduced(2, 4);
+    const int cw = divArea.getWidth() / 4;
+    const int rh = divArea.getHeight() / 2;
     for (int i = 0; i < numDivButtons; ++i)
-        divButtons[i].setBounds(divRow.getX() + i * dw, divRow.getY(), dw - 2, divRow.getHeight());
+    {
+        const int row = i / 4;
+        const int col = i % 4;
+        divButtons[i].setBounds(divArea.getX() + col * cw, divArea.getY() + row * rh, cw - 3, rh - 3);
+    }
 
     // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
