@@ -40,6 +40,7 @@ public:
 private:
     void timerCallback() override;
     void setupKnob(Knob& k, const juce::String& paramID, const juce::String& text);
+    void setDelayDivision(int index);
     juce::Rectangle<float> eqArea() const;
     juce::Point<float> nodePosition(int band) const;
     void setBandFromPoint(int band, juce::Point<float> p);
@@ -55,6 +56,9 @@ private:
     juce::ComboBox presetBox;
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
 
+    static constexpr int numDivButtons = 8;
+    juce::TextButton divButtons[numDivButtons];
+
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
@@ -64,12 +68,13 @@ private:
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
     Knob sfxDrive;
-    Knob delayMix, delayTime;
+    Knob delayMix;
     Knob revRoom, revDamp, revMix;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
     float outLevel = 0.0f;
+    float grLevel = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoxStudioEditor)
 };
