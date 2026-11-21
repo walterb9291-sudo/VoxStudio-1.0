@@ -134,7 +134,6 @@ namespace
         g.fillRoundedRectangle(r.toFloat().withWidth(fillW), 2.0f);
     }
 
-    // Medidor VU: escala con dB, aguja según reducción de ganancia
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
     {
         g.setColour(Neon::bg);
@@ -188,11 +187,11 @@ NeonLookAndFeel::NeonLookAndFeel()
 {
     setColour(juce::ComboBox::backgroundColourId, Neon::panel);
     setColour(juce::ComboBox::outlineColourId, Neon::grid);
-    setColour(juce::ComboBox::textColourId, Neon::text);
-    setColour(juce::ComboBox::arrowColourId, Neon::sky);
+    setColour(juce::ComboBox::textColourId, Neon::mint);
+    setColour(juce::ComboBox::arrowColourId, Neon::violet);
     setColour(juce::PopupMenu::backgroundColourId, Neon::panel);
     setColour(juce::PopupMenu::textColourId, Neon::text);
-    setColour(juce::PopupMenu::highlightedBackgroundColourId, Neon::violet.withAlpha(0.5f));
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, Neon::violet.withAlpha(0.35f));
     setColour(juce::Slider::textBoxTextColourId, Neon::text);
     setColour(juce::TextButton::buttonColourId, Neon::panel);
     setColour(juce::TextButton::buttonOnColourId, Neon::sky.withAlpha(0.35f));
@@ -202,24 +201,28 @@ NeonLookAndFeel::NeonLookAndFeel()
 
 juce::Font NeonLookAndFeel::getComboBoxFont(juce::ComboBox&)
 {
-    return juce::Font(juce::FontOptions("Segoe UI", 12.5f, juce::Font::plain));
+    return juce::Font(juce::FontOptions("Segoe UI", 11.0f, juce::Font::plain));
 }
 
 void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
                                    int, int, int, int, juce::ComboBox&)
 {
+    // Fondo sobrio, sin borde pesado; solo una línea violeta fina abajo
     auto r = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height);
-    g.setColour(Neon::panel);
-    g.fillRoundedRectangle(r, 4.0f);
-    g.setColour(Neon::violet.withAlpha(0.4f));
-    g.drawRoundedRectangle(r.reduced(0.5f), 4.0f, 1.0f);
+    g.setColour(Neon::panel.withAlpha(0.6f));
+    g.fillRoundedRectangle(r, 3.0f);
 
+    g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.0f), r.getX() + 6.0f, r.getBottom(),
+                                           Neon::violet, r.getRight() - 6.0f, r.getBottom(), false));
+    g.fillRect(r.getX() + 6.0f, r.getBottom() - 1.0f, r.getWidth() - 12.0f, 1.0f);
+
+    // Flecha pequeña en trazo fino
     juce::Path arrow;
-    arrow.startNewSubPath(width - 16.0f, height * 0.42f);
-    arrow.lineTo(width - 11.0f, height * 0.62f);
-    arrow.lineTo(width - 6.0f, height * 0.42f);
-    g.setColour(Neon::sky);
-    g.strokePath(arrow, juce::PathStrokeType(1.3f));
+    arrow.startNewSubPath(width - 14.0f, height * 0.44f);
+    arrow.lineTo(width - 10.5f, height * 0.60f);
+    arrow.lineTo(width - 7.0f, height * 0.44f);
+    g.setColour(Neon::sky.withAlpha(0.8f));
+    g.strokePath(arrow, juce::PathStrokeType(1.0f));
 }
 
 void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
@@ -604,7 +607,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    // Visual del delay: ecos decrecientes
     {
         auto d = innerRect(panelRect(3, w, h)).withTrimmedTop(230);
         const int taps = 6;
@@ -634,7 +636,6 @@ void VoxStudioEditor::resized()
     producer.setBounds(w - 120, 14, 96, 14);
     bypassButton.setBounds(w - 120, 44, 96, 22);
 
-    // COMPRESSOR
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(112);
     placeKnob(compThreshold, p0.removeFromTop(90).reduced(40, 0));
@@ -644,7 +645,6 @@ void VoxStudioEditor::resized()
     placeKnob(compRelease, compCells[2]);
     placeKnob(compMakeup,  compCells[3]);
 
-    // EQ
     auto p1 = innerRect(panelRect(1, w, h));
     p1.removeFromTop(270);
     const auto bandCols = cellsOf(p1, 4, 1);
@@ -656,18 +656,16 @@ void VoxStudioEditor::resized()
         placeKnob(eqQ[b],    rows[2]);
     }
 
-    // SFX / REVERB
     auto p2 = innerRect(panelRect(2, w, h));
     auto top2 = p2.removeFromTop(150);
     placeKnob(sfxDrive, top2.reduced(40, 0));
     auto presetRow = p2.removeFromTop(44);
-    presetBox.setBounds(presetRow.reduced(4, 10));
+    presetBox.setBounds(presetRow.reduced(4, 12));
     const auto revCells = cellsOf(p2, 3, 1);
     placeKnob(revRoom, revCells[0]);
     placeKnob(revDamp, revCells[1]);
     placeKnob(revMix,  revCells[2]);
 
-    // DELAY: mezcla arriba, botones de división en 2 filas de 4 abajo
     auto p3 = innerRect(panelRect(3, w, h));
     auto top3 = p3.removeFromTop(120);
     placeKnob(delayMix, top3.reduced(40, 0));
@@ -681,7 +679,6 @@ void VoxStudioEditor::resized()
         divButtons[i].setBounds(divArea.getX() + col * cw, divArea.getY() + row * rh, cw - 3, rh - 3);
     }
 
-    // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
     inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
