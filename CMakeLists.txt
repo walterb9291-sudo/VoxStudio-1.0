@@ -43,3 +43,5 @@ target_link_libraries(VoxStudio PRIVATE
     juce::juce_gui_basics
     juce::juce_gui_extra
     juce::juce_audio_plugin_client)
+
+juce_generate_juce_header(VoxStudio)
