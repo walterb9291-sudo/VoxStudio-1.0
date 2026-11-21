@@ -54,8 +54,9 @@ private:
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
 
     juce::TextButton bypassButton { "BYPASS" };
-    bool bypassed = false;
+    std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
+    Knob inGain;
     Knob gateThreshold, gateRelease;
     Knob compThreshold, compRatio, compAttack, compRelease, compMakeup;
     Knob eqFreq[VoxStudioProcessor::numEqBands];
