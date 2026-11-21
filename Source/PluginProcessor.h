@@ -35,10 +35,12 @@ public:
 
     void applyReverbPreset(int index);
     static const juce::StringArray reverbPresetNames;
+    static const juce::StringArray delayDivisionNames;
     static constexpr int numEqBands = 4;
 
     float getInputLevel() const { return inputLevel.load(); }
     float getOutputLevel() const { return outputLevel.load(); }
+    float getGainReduction() const { return gainReductionDb.load(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
@@ -48,6 +50,7 @@ private:
     void updateEq();
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
+    double delayTimeMs() const;
 
     double currentSampleRate = 44100.0;
     juce::dsp::ProcessSpec spec {};
@@ -70,6 +73,7 @@ private:
 
     std::atomic<float> inputLevel { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
+    std::atomic<float> gainReductionDb { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoxStudioProcessor)
 };
