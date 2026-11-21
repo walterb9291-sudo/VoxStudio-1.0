@@ -2,59 +2,175 @@
 
 namespace VoxColours
 {
-    const juce::Colour background { 0xff0a0814 };
-    const juce::Colour panel      { 0xff15102a };
-    const juce::Colour panelEdge  { 0xff2a1f4d };
-    const juce::Colour violet     { 0xff9d5cff };
-    const juce::Colour sky        { 0xff4fc3ff };
-    const juce::Colour text       { 0xffe8e2ff };
-    const juce::Colour muted      { 0xff7f7aa0 };
+    const juce::Colour bg      { 0xff07060f };
+    const juce::Colour rack    { 0xff110d1f };
+    const juce::Colour module  { 0xff1a1430 };
+    const juce::Colour edge    { 0xff2e2350 };
+    const juce::Colour violet  { 0xff9d5cff };
+    const juce::Colour sky     { 0xff4fc3ff };
+    const juce::Colour text    { 0xffeae4ff };
+    const juce::Colour muted   { 0xff7d78a3 };
 }
+
+namespace
+{
+    juce::Rectangle<int> rackArea(juce::Rectangle<int> full)
+    {
+        return full.withTrimmedTop(96).reduced(20, 0).withTrimmedBottom(20);
+    }
+
+    juce::Rectangle<int> moduleBounds(juce::Rectangle<int> area, int index, int count)
+    {
+        const int gap = 12;
+        const int w = (area.getWidth() - gap * (count - 1)) / count;
+        return { area.getX() + index * (w + gap), area.getY(), w, area.getHeight() };
+    }
+
+    juce::Rectangle<int> moduleContent(juce::Rectangle<int> r)
+    {
+        return r.reduced(10, 0).withTrimmedTop(38).withTrimmedBottom(12);
+    }
+
+    std::vector<juce::Rectangle<int>> gridCells(juce::Rectangle<int> a, int cols, int rows)
+    {
+        std::vector<juce::Rectangle<int>> out;
+        const int cw = a.getWidth() / cols;
+        const int rh = a.getHeight() / rows;
+        for (int r = 0; r < rows; ++r)
+            for (int c = 0; c < cols; ++c)
+                out.push_back({ a.getX() + c * cw, a.getY() + r * rh, cw, rh });
+        return out;
+    }
+
+    // Coloca una perilla con su etiqueta arriba de la celda
+    void placeKnob(VoxStudioEditor::Knob& k, juce::Rectangle<int> cell)
+    {
+        k.label.setBounds(cell.removeFromTop(14));
+        k.slider.setBounds(cell.reduced(2));
+    }
+
+    void drawModule(juce::Graphics& g, juce::Rectangle<int> r, const juce::String& name, juce::Colour accent)
+    {
+        auto f = r.toFloat();
+
+        g.setColour(VoxColours::module);
+        g.fillRoundedRectangle(f, 14.0f);
+
+        g.setColour(VoxColours::edge);
+        g.drawRoundedRectangle(f.reduced(0.5f), 14.0f, 1.0f);
+
+        juce::ColourGradient grad(VoxColours::violet, f.getX(), f.getY(),
+                                  VoxColours::sky, f.getRight(), f.getY(), false);
+        g.setGradientFill(grad);
+        g.fillRect(f.getX() + 14.0f, f.getY() + 1.0f, f.getWidth() - 28.0f, 2.0f);
+
+        g.setColour(accent);
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(name, r.withHeight(34).reduced(14, 0), juce::Justification::centredLeft, false);
+    }
+}
+
+// ---------- Look and feel ----------
+
+RackLookAndFeel::RackLookAndFeel()
+{
+    setColour(juce::ComboBox::backgroundColourId, VoxColours::rack);
+    setColour(juce::ComboBox::outlineColourId, VoxColours::violet.withAlpha(0.5f));
+    setColour(juce::ComboBox::textColourId, VoxColours::text);
+    setColour(juce::ComboBox::arrowColourId, VoxColours::sky);
+
+    setColour(juce::PopupMenu::backgroundColourId, VoxColours::module);
+    setColour(juce::PopupMenu::textColourId, VoxColours::text);
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, VoxColours::violet.withAlpha(0.6f));
+    setColour(juce::PopupMenu::highlightedTextColourId, VoxColours::text);
+
+    setColour(juce::Slider::textBoxTextColourId, VoxColours::text);
+    setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+}
+
+void RackLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+                                       float sliderPos, float startAngle, float endAngle,
+                                       juce::Slider&)
+{
+    auto bounds = juce::Rectangle<float>((float) x, (float) y, (float) width, (float) height).reduced(4.0f);
+    const float diameter = juce::jmin(bounds.getWidth(), bounds.getHeight());
+    const float radius = diameter * 0.5f;
+    const float cx = bounds.getCentreX();
+    const float cy = bounds.getCentreY();
+    const float thickness = 4.0f;
+    const float arcR = radius - thickness * 0.5f;
+    const float angle = startAngle + sliderPos * (endAngle - startAngle);
+
+    juce::Path track;
+    track.addCentredArc(cx, cy, arcR, arcR, 0.0f, startAngle, endAngle, true);
+    g.setColour(VoxColours::edge);
+    g.strokePath(track, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    if (sliderPos > 0.001f)
+    {
+        juce::Path value;
+        value.addCentredArc(cx, cy, arcR, arcR, 0.0f, startAngle, angle, true);
+        juce::ColourGradient grad(VoxColours::violet, cx - radius, cy,
+                                  VoxColours::sky, cx + radius, cy, false);
+        g.setGradientFill(grad);
+        g.strokePath(value, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    const float knobR = radius - thickness * 2.5f;
+    g.setColour(VoxColours::rack);
+    g.fillEllipse(cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f);
+
+    const float inner = knobR * 0.35f;
+    const float outer = knobR * 0.85f;
+    juce::Line<float> pointer(cx + inner * std::sin(angle), cy - inner * std::cos(angle),
+                              cx + outer * std::sin(angle), cy - outer * std::cos(angle));
+    g.setColour(VoxColours::text);
+    g.drawLine(pointer, 2.0f);
+}
+
+// ---------- Editor ----------
 
 VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
-    setSize(920, 540);
+    setSize(980, 600);
     setResizable(false, false);
+    setLookAndFeel(&lnf);
 
     title.setText("VOXSTUDIO", juce::dontSendNotification);
-    title.setFont(juce::FontOptions(24.0f, juce::Font::bold));
-    title.setColour(juce::Label::textColourId, VoxColours::sky);
+    title.setFont(juce::FontOptions(26.0f, juce::Font::bold));
+    title.setColour(juce::Label::textColourId, VoxColours::text);
     addAndMakeVisible(title);
 
-    subtitle.setText("1.0  ·  Compressor  ·  Reverb  ·  Dynamics  ·  SFX", juce::dontSendNotification);
+    subtitle.setText("1.0  ·  Gate  ·  Compressor  ·  SFX  ·  Reverb  ·  Output", juce::dontSendNotification);
     subtitle.setFont(juce::FontOptions(12.0f));
     subtitle.setColour(juce::Label::textColourId, VoxColours::muted);
     addAndMakeVisible(subtitle);
 
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
-    presetBox.setColour(juce::ComboBox::backgroundColourId, VoxColours::panel);
-    presetBox.setColour(juce::ComboBox::outlineColourId, VoxColours::violet.withAlpha(0.5f));
-    presetBox.setColour(juce::ComboBox::textColourId, VoxColours::text);
     addAndMakeVisible(presetBox);
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
+    setupKnob(gateThreshold, "gate_threshold", "THRESH");
+    setupKnob(gateRelease,   "gate_release",   "RELEASE");
+
     setupKnob(compThreshold, "comp_threshold", "THRESH");
     setupKnob(compRatio,     "comp_ratio",     "RATIO");
+    setupKnob(compMakeup,    "comp_makeup",    "MAKEUP");
     setupKnob(compAttack,    "comp_attack",    "ATTACK");
     setupKnob(compRelease,   "comp_release",   "RELEASE");
-    setupKnob(compMakeup,    "comp_makeup",    "MAKEUP");
-
-    setupKnob(revRoom, "rev_room", "ROOM");
-    setupKnob(revDamp, "rev_damp", "DAMP");
-    setupKnob(revMix,  "rev_mix",  "MIX");
-
-    setupKnob(gateThreshold, "gate_threshold", "GATE");
-    setupKnob(gateRelease,   "gate_release",   "G.REL");
 
     setupKnob(sfxDrive,     "sfx_drive",      "DRIVE");
     setupKnob(sfxDelay,     "sfx_delay",      "D.MIX");
     setupKnob(sfxDelayTime, "sfx_delay_time", "D.TIME");
 
-    setupKnob(outGain, "out_gain", "OUTPUT");
+    setupKnob(revRoom, "rev_room", "ROOM");
+    setupKnob(revDamp, "rev_damp", "DAMP");
+    setupKnob(revMix,  "rev_mix",  "MIX");
 
-    setLookAndFeel(&lnf);
+    setupKnob(outGain, "out_gain", "OUTPUT");
 }
 
 VoxStudioEditor::~VoxStudioEditor()
@@ -62,19 +178,14 @@ VoxStudioEditor::~VoxStudioEditor()
     setLookAndFeel(nullptr);
 }
 
-void VoxStudioEditor::setupKnob(KnobWithLabel& k, const juce::String& paramID, const juce::String& text)
+void VoxStudioEditor::setupKnob(Knob& k, const juce::String& paramID, const juce::String& text)
 {
     k.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    k.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 64, 16);
-    k.slider.setColour(juce::Slider::rotarySliderFillColourId, VoxColours::violet);
-    k.slider.setColour(juce::Slider::rotarySliderOutlineColourId, VoxColours::panelEdge);
-    k.slider.setColour(juce::Slider::thumbColourId, VoxColours::sky);
-    k.slider.setColour(juce::Slider::textBoxTextColourId, VoxColours::text);
-    k.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    k.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 14);
     addAndMakeVisible(k.slider);
 
     k.label.setText(text, juce::dontSendNotification);
-    k.label.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    k.label.setFont(juce::FontOptions(9.5f, juce::Font::bold));
     k.label.setColour(juce::Label::textColourId, VoxColours::muted);
     k.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(k.label);
@@ -83,80 +194,76 @@ void VoxStudioEditor::setupKnob(KnobWithLabel& k, const juce::String& paramID, c
         *processor.apvts.getParameter(paramID), k.slider, nullptr);
 }
 
-void VoxStudioEditor::drawPanel(juce::Graphics& g, juce::Rectangle<int> r,
-                                const juce::String& name, juce::Colour accent)
-{
-    g.setColour(VoxColours::panel);
-    g.fillRoundedRectangle(r.toFloat(), 14.0f);
-
-    g.setColour(accent.withAlpha(0.45f));
-    g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 14.0f, 1.0f);
-
-    g.setColour(accent);
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText(name, r.removeFromTop(28).reduced(16, 0), juce::Justification::centredLeft);
-}
-
 void VoxStudioEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(VoxColours::background);
+    auto full = getLocalBounds();
 
-    juce::ColourGradient grad(VoxColours::violet.withAlpha(0.28f), 0.0f, 0.0f,
-                              VoxColours::sky.withAlpha(0.10f), (float) getWidth(), 0.0f, false);
-    g.setGradientFill(grad);
-    g.fillRect(0, 0, getWidth(), 76);
+    g.setColour(VoxColours::bg);
+    g.fillRect(full);
 
-    const auto body = getLocalBounds().withTrimmedTop(88).reduced(20, 0).withTrimmedBottom(20);
-    const int gap = 16;
-    const int colW = (body.getWidth() - 2 * gap) / 3;
+    auto header = full.removeFromTop(84);
+    juce::ColourGradient headGrad(VoxColours::violet.withAlpha(0.22f), 0.0f, 0.0f,
+                                  VoxColours::sky.withAlpha(0.06f), (float) header.getRight(), 0.0f, false);
+    g.setGradientFill(headGrad);
+    g.fillRect(header);
 
-    drawPanel(g, body.withWidth(colW), "COMPRESSOR", VoxColours::violet);
-    drawPanel(g, body.withX(body.getX() + colW + gap).withWidth(colW), "REVERB", VoxColours::sky);
-    drawPanel(g, body.withX(body.getX() + 2 * (colW + gap)).withWidth(colW), "DYNAMICS · SFX", VoxColours::violet);
+    g.setColour(VoxColours::violet.withAlpha(0.7f));
+    g.fillRect(header.removeFromBottom(1));
+
+    const char* names[] = { "GATE", "COMPRESSOR", "SFX · DELAY", "REVERB", "OUTPUT" };
+    const auto area = rackArea(getLocalBounds());
+    const int count = 5;
+
+    for (int i = 0; i < count; ++i)
+    {
+        const juce::Colour accent = (i % 2 == 0) ? VoxColours::sky : VoxColours::violet;
+        drawModule(g, moduleBounds(area, i, count), names[i], accent);
+    }
 }
 
 void VoxStudioEditor::resized()
 {
-    auto header = getLocalBounds().removeFromTop(76).reduced(20, 14);
-    title.setBounds(header.removeFromTop(28));
-    subtitle.setBounds(header.removeFromTop(16));
+    title.setBounds(24, 14, 300, 34);
+    subtitle.setBounds(24, 50, 600, 18);
 
-    const auto body = getLocalBounds().withTrimmedTop(88).reduced(20, 0).withTrimmedBottom(20);
-    const int gap = 16;
-    const int colW = (body.getWidth() - 2 * gap) / 3;
+    const auto area = rackArea(getLocalBounds());
+    const int count = 5;
 
-    auto place = [](KnobWithLabel& k, juce::Rectangle<int> cell)
-    {
-        k.label.setBounds(cell.removeFromBottom(16));
-        k.slider.setBounds(cell.reduced(2));
-    };
+    const auto gateC = moduleContent(moduleBounds(area, 0, count));
+    const auto compC = moduleContent(moduleBounds(area, 1, count));
+    const auto sfxC  = moduleContent(moduleBounds(area, 2, count));
+    const auto revC  = moduleContent(moduleBounds(area, 3, count));
+    const auto outC  = moduleContent(moduleBounds(area, 4, count));
 
-    auto grid = [](juce::Rectangle<int> area, int cols, int rows)
-    {
-        std::vector<juce::Rectangle<int>> cells;
-        const int cw = area.getWidth() / cols;
-        const int rh = area.getHeight() / rows;
-        for (int r = 0; r < rows; ++r)
-            for (int c = 0; c < cols; ++c)
-                cells.push_back({ area.getX() + c * cw, area.getY() + r * rh, cw, rh });
-        return cells;
-    };
+    // Gate: 2 perillas
+    const auto gateCells = gridCells(gateC, 2, 1);
+    placeKnob(gateThreshold, gateCells[0]);
+    placeKnob(gateRelease,   gateCells[1]);
 
-    auto compArea = body.withWidth(colW).reduced(12, 36);
-    auto cc = grid(compArea, 3, 2);
-    place(compThreshold, cc[0]); place(compRatio, cc[1]); place(compMakeup, cc[2]);
-    place(compAttack,    cc[3]); place(compRelease, cc[4]);
+    // Compresor: 3 arriba, 2 abajo
+    const auto compCells = gridCells(compC, 3, 2);
+    placeKnob(compThreshold, compCells[0]);
+    placeKnob(compRatio,     compCells[1]);
+    placeKnob(compMakeup,    compCells[2]);
+    placeKnob(compAttack,    compCells[3]);
+    placeKnob(compRelease,   compCells[4]);
 
-    auto revArea = body.withX(body.getX() + colW + gap).withWidth(colW).reduced(12, 36);
-    presetBox.setBounds(revArea.removeFromTop(28).reduced(24, 0));
-    auto rc = grid(revArea.reduced(0, 8), 3, 1);
-    place(revRoom, rc[0]); place(revDamp, rc[1]); place(revMix, rc[2]);
+    // SFX: 3 perillas
+    const auto sfxCells = gridCells(sfxC, 3, 1);
+    placeKnob(sfxDrive,     sfxCells[0]);
+    placeKnob(sfxDelay,     sfxCells[1]);
+    placeKnob(sfxDelayTime, sfxCells[2]);
 
-    auto dArea = body.withX(body.getX() + 2 * (colW + gap)).withWidth(colW).reduced(12, 36);
-    auto dRows = grid(dArea, 1, 3);
-    auto gateCells = grid(dRows[0], 2, 1);
-    place(gateThreshold, gateCells[0]); place(gateRelease, gateCells[1]);
-    auto sfxCells = grid(dRows[1], 3, 1);
-    place(sfxDrive, sfxCells[0]); place(sfxDelay, sfxCells[1]); place(sfxDelayTime, sfxCells[2]);
-    place(outGain, dRows[2]);
+    // Reverb: selector de preset arriba y 3 perillas
+    auto revArea = revC;
+    presetBox.setBounds(revArea.removeFromTop(26).reduced(2, 0));
+    revArea.removeFromTop(10);
+    const auto revCells = gridCells(revArea, 3, 1);
+    placeKnob(revRoom, revCells[0]);
+    placeKnob(revDamp, revCells[1]);
+    placeKnob(revMix,  revCells[2]);
+
+    // Salida: 1 perilla
+    const auto outCells = gridCells(outC, 1, 1);
+    placeKnob(outGain, outCells[0]);
 }
