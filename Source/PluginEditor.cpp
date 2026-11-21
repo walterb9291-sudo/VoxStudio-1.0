@@ -3,8 +3,9 @@
 namespace Neon
 {
     const juce::Colour bg      { 0xff05040b };
-    const juce::Colour panel   { 0xff0e0b1c };
-    const juce::Colour grid    { 0xff1d1738 };
+    const juce::Colour panel   { 0xff0a0816 };
+    const juce::Colour panelHi { 0xff19122f };
+    const juce::Colour grid    { 0xff2a2150 };
     const juce::Colour violet  { 0xffa855f7 };
     const juce::Colour sky     { 0xff38bdf8 };
     const juce::Colour mint    { 0xff2dd4bf };
@@ -15,38 +16,27 @@ namespace Neon
 
 namespace
 {
-    void drawPanel(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& name, juce::Colour accent)
+    constexpr int pad      = 16;
+    constexpr int headerH  = 74;
+    constexpr int panelTop = 88;
+
+    struct EqLayout
     {
-        const float c = 12.0f;
-        juce::Path p;
-        p.startNewSubPath(r.getX() + c, r.getY());
-        p.lineTo(r.getRight() - c, r.getY());
-        p.lineTo(r.getRight(), r.getY() + c);
-        p.lineTo(r.getRight(), r.getBottom() - c);
-        p.lineTo(r.getRight() - c, r.getBottom());
-        p.lineTo(r.getX() + c, r.getBottom());
-        p.lineTo(r.getX(), r.getBottom() - c);
-        p.lineTo(r.getX(), r.getY() + c);
-        p.closeSubPath();
+        juce::Rectangle<int> curve, names, bands;
+    };
 
-        g.setColour(Neon::panel);
-        g.fillPath(p);
-
-        g.setColour(accent.withAlpha(0.55f));
-        g.strokePath(p, juce::PathStrokeType(1.2f));
-
-        juce::ColourGradient glow(accent.withAlpha(0.35f), r.getX(), r.getY(),
-                                  accent.withAlpha(0.0f), r.getX(), r.getY() + 60.0f, false);
-        g.setGradientFill(glow);
-        g.fillRect(r.withHeight(60.0f));
-
-        g.setColour(accent);
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-        g.drawText(name, r.removeFromTop(26.0f).reduced(14.0f, 0.0f),
-                   juce::Justification::centredLeft, false);
+    juce::Rectangle<int> panelRect(int i, int w, int h)
+    {
+        const int colW = (w - pad * 5) / 4;
+        return { pad + i * (colW + pad), panelTop, colW, h - panelTop - pad };
     }
 
-    std::vector<juce::Rectangle<int>> cells(juce::Rectangle<int> a, int cols, int rows)
+    juce::Rectangle<int> innerRect(juce::Rectangle<int> p)
+    {
+        return p.reduced(14, 0).withTrimmedTop(46).withTrimmedBottom(14);
+    }
+
+    std::vector<juce::Rectangle<int>> cellsOf(juce::Rectangle<int> a, int cols, int rows)
     {
         std::vector<juce::Rectangle<int>> out;
         const int cw = a.getWidth() / cols;
@@ -57,10 +47,81 @@ namespace
         return out;
     }
 
+    EqLayout eqLayout(juce::Rectangle<int> panel)
+    {
+        auto inner = innerRect(panel);
+        EqLayout l;
+        l.curve = inner.removeFromTop(150);
+        inner.removeFromTop(8);
+        l.names = inner.removeFromTop(18);
+        l.bands = inner;
+        return l;
+    }
+
+    juce::Rectangle<int> meterArea(juce::Rectangle<int> panel)
+    {
+        return innerRect(panel).removeFromBottom(150);
+    }
+
     void placeKnob(VoxStudioEditor::Knob& k, juce::Rectangle<int> cell)
     {
-        k.label.setBounds(cell.removeFromTop(14));
-        k.slider.setBounds(cell.reduced(4));
+        k.label.setBounds(cell.removeFromBottom(16));
+        k.slider.setBounds(cell.reduced(2));
+    }
+
+    void drawPanel(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& name, juce::Colour accent)
+    {
+        const float c = 14.0f;
+        juce::Path shape;
+        shape.startNewSubPath(r.getX() + c, r.getY());
+        shape.lineTo(r.getRight() - c, r.getY());
+        shape.lineTo(r.getRight(), r.getY() + c);
+        shape.lineTo(r.getRight(), r.getBottom() - c);
+        shape.lineTo(r.getRight() - c, r.getBottom());
+        shape.lineTo(r.getX() + c, r.getBottom());
+        shape.lineTo(r.getX(), r.getBottom() - c);
+        shape.lineTo(r.getX(), r.getY() + c);
+        shape.closeSubPath();
+
+        g.setGradientFill(juce::ColourGradient(Neon::panelHi, r.getX(), r.getY(),
+                                               Neon::panel, r.getX(), r.getBottom(), false));
+        g.fillPath(shape);
+
+        g.setColour(accent.withAlpha(0.45f));
+        g.strokePath(shape, juce::PathStrokeType(1.0f));
+
+        // Acentos en las esquinas
+        g.setColour(accent);
+        g.fillRect(r.getX() + 22.0f, r.getY(), 28.0f, 2.0f);
+        g.fillRect(r.getRight() - 50.0f, r.getBottom() - 2.0f, 28.0f, 2.0f);
+
+        // Marcador y título
+        g.fillRoundedRectangle(r.getX() + 18.0f, r.getY() + 14.0f, 6.0f, 6.0f, 1.5f);
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(name, juce::Rectangle<int>((int) (r.getX() + 30.0f), (int) (r.getY() + 10.0f),
+                                              (int) (r.getWidth() - 40.0f), 18),
+                   juce::Justification::centredLeft, false);
+
+        // Divisor que se desvanece
+        g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.6f), r.getX() + 18.0f, r.getY() + 38.0f,
+                                               accent.withAlpha(0.0f), r.getRight() - 18.0f, r.getY() + 38.0f, false));
+        g.fillRect(r.getX() + 18.0f, r.getY() + 38.0f, r.getWidth() - 36.0f, 1.0f);
+    }
+
+    void drawMeter(juce::Graphics& g, juce::Rectangle<int> r, float level, juce::Colour c)
+    {
+        g.setColour(Neon::grid);
+        g.fillRoundedRectangle(r.toFloat(), 3.0f);
+
+        const float fillH = (float) r.getHeight() * juce::jlimit(0.0f, 1.0f, level);
+        auto filled = r.toFloat().removeFromBottom(fillH);
+        g.setColour(c);
+        g.fillRoundedRectangle(filled, 3.0f);
+
+        // Segmentos
+        g.setColour(Neon::panel);
+        for (float y = (float) r.getY() + 5.0f; y < (float) r.getBottom(); y += 6.0f)
+            g.fillRect((float) r.getX(), y, (float) r.getWidth(), 1.5f);
     }
 }
 
@@ -82,33 +143,78 @@ NeonLookAndFeel::NeonLookAndFeel()
 
 void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                                        float sliderPos, float startAngle, float endAngle,
-                                       juce::Slider&)
+                                       juce::Slider& slider)
 {
-    auto b = juce::Rectangle<float>((float) x, (float) y, (float) width, (float) height).reduced(5.0f);
-    const float radius = juce::jmin(b.getWidth(), b.getHeight()) * 0.5f;
-    const float cx = b.getCentreX();
-    const float cy = b.getCentreY();
+    auto area = juce::Rectangle<float>((float) x, (float) y, (float) width, (float) height).reduced(8.0f);
+    const float radius = juce::jmin(area.getWidth(), area.getHeight()) * 0.5f;
+    const float cx = area.getCentreX();
+    const float cy = area.getCentreY();
     const float angle = startAngle + sliderPos * (endAngle - startAngle);
+    const float trackR = radius - 5.0f;
 
-    juce::Path ring;
-    ring.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, endAngle, true);
+    // Marcas de escala
+    for (int i = 0; i <= 10; ++i)
+    {
+        const float t = (float) i / 10.0f;
+        const float a = startAngle + t * (endAngle - startAngle);
+        const float r1 = radius + 1.0f;
+        const float r2 = radius + (i % 5 == 0 ? 6.0f : 3.5f);
+        g.setColour(t <= sliderPos + 0.001f ? Neon::violet : Neon::grid);
+        g.drawLine(cx + r1 * std::sin(a), cy - r1 * std::cos(a),
+                   cx + r2 * std::sin(a), cy - r2 * std::cos(a), 1.5f);
+    }
+
+    // Pista
+    juce::Path track;
+    track.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, endAngle, true);
     g.setColour(Neon::grid);
-    g.strokePath(ring, juce::PathStrokeType(3.0f));
+    g.strokePath(track, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    juce::Path value;
-    value.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, angle, true);
-    juce::ColourGradient grad(Neon::violet, cx - radius, cy, Neon::mint, cx + radius, cy, false);
-    g.setGradientFill(grad);
-    g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    // Arco de valor con brillo
+    if (sliderPos > 0.001f)
+    {
+        juce::Path value;
+        value.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, angle, true);
 
-    const float body = radius * 0.62f;
-    g.setColour(Neon::bg);
-    g.fillEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f);
+        g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.25f), cx - trackR, cy,
+                                               Neon::sky.withAlpha(0.25f), cx + trackR, cy, false));
+        g.strokePath(value, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    const float px = cx + (body * 0.75f) * std::sin(angle);
-    const float py = cy - (body * 0.75f) * std::cos(angle);
-    g.setColour(Neon::sky);
-    g.fillEllipse(px - 2.5f, py - 2.5f, 5.0f, 5.0f);
+        g.setGradientFill(juce::ColourGradient(Neon::violet, cx - trackR, cy,
+                                               Neon::sky, cx + trackR, cy, false));
+        g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    // Cuerpo de la perilla
+    const float bodyR = trackR - 8.0f;
+    g.setGradientFill(juce::ColourGradient(Neon::panelHi, cx, cy - bodyR, Neon::bg, cx, cy + bodyR, false));
+    g.fillEllipse(cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f);
+    g.setColour(Neon::grid);
+    g.drawEllipse(cx - bodyR, cy - bodyR, bodyR * 2.0f, bodyR * 2.0f, 1.0f);
+
+    if (slider.isMouseOverOrDragging())
+    {
+        // Muestra el valor solo al pasar el mouse o girar
+        g.setColour(Neon::text);
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(slider.getTextFromValue(slider.getValue()),
+                   juce::Rectangle<int>((int) (cx - bodyR), (int) (cy - 8.0f), (int) (bodyR * 2.0f), 16),
+                   juce::Justification::centred, false);
+    }
+    else
+    {
+        // Indicador con punto en la punta
+        const float innerX = cx + bodyR * 0.35f * std::sin(angle);
+        const float innerY = cy - bodyR * 0.35f * std::cos(angle);
+        const float tipX   = cx + bodyR * 0.8f * std::sin(angle);
+        const float tipY   = cy - bodyR * 0.8f * std::cos(angle);
+
+        g.setColour(Neon::text);
+        g.drawLine(juce::Line<float>(innerX, innerY, tipX, tipY), 2.0f);
+
+        g.setColour(Neon::mint);
+        g.fillEllipse(tipX - 2.5f, tipY - 2.5f, 5.0f, 5.0f);
+    }
 }
 
 // ---------- Editor ----------
@@ -125,7 +231,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     title.setColour(juce::Label::textColourId, Neon::text);
     addAndMakeVisible(title);
 
-    subtitle.setText("1.0  //  GATE  ·  COMP  ·  EQ  ·  SFX  ·  REVERB  ·  OUT", juce::dontSendNotification);
+    subtitle.setText("1.0   /   GATE   COMP   EQ   SFX   REVERB   OUTPUT", juce::dontSendNotification);
     subtitle.setFont(juce::FontOptions(11.0f));
     subtitle.setColour(juce::Label::textColourId, Neon::muted);
     addAndMakeVisible(subtitle);
@@ -135,8 +241,8 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
-    setupKnob(gateThreshold, "gate_threshold", "THRESH");
-    setupKnob(gateRelease,   "gate_release",   "RELEASE");
+    setupKnob(gateThreshold, "gate_threshold", "GATE THR");
+    setupKnob(gateRelease,   "gate_release",   "GATE REL");
 
     setupKnob(compThreshold, "comp_threshold", "THRESH");
     setupKnob(compRatio,     "comp_ratio",     "RATIO");
@@ -147,15 +253,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const juce::String n = "eq" + juce::String(b + 1) + "_";
-        const juce::String tag = "B" + juce::String(b + 1);
-        setupKnob(eqFreq[b], n + "freq", tag + " FREQ");
-        setupKnob(eqGain[b], n + "gain", tag + " GAIN");
-        setupKnob(eqQ[b],    n + "q",    tag + " Q");
+        setupKnob(eqFreq[b], n + "freq", "FREQ");
+        setupKnob(eqGain[b], n + "gain", "GAIN");
+        setupKnob(eqQ[b],    n + "q",    "Q");
     }
 
     setupKnob(sfxDrive,     "sfx_drive",      "DRIVE");
-    setupKnob(sfxDelay,     "sfx_delay",      "D.MIX");
-    setupKnob(sfxDelayTime, "sfx_delay_time", "D.TIME");
+    setupKnob(sfxDelay,     "sfx_delay",      "D MIX");
+    setupKnob(sfxDelayTime, "sfx_delay_time", "D TIME");
 
     setupKnob(revRoom, "rev_room", "ROOM");
     setupKnob(revDamp, "rev_damp", "DAMP");
@@ -175,7 +280,7 @@ VoxStudioEditor::~VoxStudioEditor()
 void VoxStudioEditor::setupKnob(Knob& k, const juce::String& paramID, const juce::String& text)
 {
     k.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    k.slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 14);
+    k.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     addAndMakeVisible(k.slider);
 
     k.label.setText(text, juce::dontSendNotification);
@@ -197,9 +302,25 @@ void VoxStudioEditor::timerCallback()
 
 void VoxStudioEditor::drawEqCurve(juce::Graphics& g, juce::Rectangle<float> area)
 {
-    juce::Path curve;
-    const int points = 120;
+    g.setColour(Neon::bg.withAlpha(0.75f));
+    g.fillRoundedRectangle(area, 8.0f);
+    g.setColour(Neon::grid);
+    g.drawRoundedRectangle(area, 8.0f, 1.0f);
 
+    // Línea de 0 dB y marcas de frecuencia
+    const float zeroY = area.getCentreY();
+    g.drawHorizontalLine((int) zeroY, area.getX(), area.getRight());
+
+    const float marks[] = { 100.0f, 1000.0f, 10000.0f };
+    for (float f : marks)
+    {
+        const float x = area.getX() + area.getWidth() * std::log(f / 20.0f) / std::log(1000.0f);
+        g.drawVerticalLine((int) x, area.getY() + 4.0f, area.getBottom() - 4.0f);
+    }
+
+    // Curva (aproximación visual de las bandas)
+    juce::Path curve;
+    const int points = 140;
     for (int i = 0; i <= points; ++i)
     {
         const float t = (float) i / (float) points;
@@ -208,111 +329,146 @@ void VoxStudioEditor::drawEqCurve(juce::Graphics& g, juce::Rectangle<float> area
 
         for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
         {
-            const float f0 = processor.apvts.getRawParameterValue(
-                "eq" + juce::String(b + 1) + "_freq")->load();
-            const float g0 = processor.apvts.getRawParameterValue(
-                "eq" + juce::String(b + 1) + "_gain")->load();
-            const float q  = processor.apvts.getRawParameterValue(
-                "eq" + juce::String(b + 1) + "_q")->load();
+            const juce::String n = "eq" + juce::String(b + 1) + "_";
+            const float f0 = processor.apvts.getRawParameterValue(n + "freq")->load();
+            const float g0 = processor.apvts.getRawParameterValue(n + "gain")->load();
+            const float q  = processor.apvts.getRawParameterValue(n + "q")->load();
 
             const float x = std::log2(freq / f0);
             db += g0 * std::exp(-x * x * q * 2.0f);
         }
 
         const float y = juce::jmap(juce::jlimit(-14.0f, 14.0f, db), -14.0f, 14.0f,
-                                   area.getBottom(), area.getY());
+                                   area.getBottom() - 6.0f, area.getY() + 6.0f);
         const float px = area.getX() + t * area.getWidth();
         if (i == 0) curve.startNewSubPath(px, y);
         else        curve.lineTo(px, y);
     }
 
-    g.setColour(Neon::violet);
-    g.strokePath(curve, juce::PathStrokeType(2.0f));
+    juce::Path fill(curve);
+    fill.lineTo(area.getRight(), zeroY);
+    fill.lineTo(area.getX(), zeroY);
+    fill.closeSubPath();
+
+    g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.30f), area.getX(), area.getY(),
+                                           Neon::violet.withAlpha(0.0f), area.getX(), zeroY, false));
+    g.fillPath(fill);
+
+    g.setGradientFill(juce::ColourGradient(Neon::violet, area.getX(), 0.0f,
+                                           Neon::sky, area.getRight(), 0.0f, false));
+    g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
 void VoxStudioEditor::paint(juce::Graphics& g)
 {
+    const int w = getWidth();
+    const int h = getHeight();
+
     g.fillAll(Neon::bg);
 
-    g.setColour(Neon::violet.withAlpha(0.15f));
-    g.fillRect(0, 0, getWidth(), 70);
-    g.setColour(Neon::sky.withAlpha(0.7f));
-    g.fillRect(0, 69, getWidth(), 1);
+    // Cuadrícula de puntos de fondo
+    g.setColour(Neon::grid.withAlpha(0.45f));
+    for (int x = 12; x < w; x += 24)
+        for (int y = 12; y < h; y += 24)
+            g.fillRect(x, y, 1, 1);
 
-    const float top = 84.0f;
-    const float pad = 16.0f;
-    const float colW = (getWidth() - pad * 5.0f) / 4.0f;
-    const float h = getHeight() - top - pad;
+    // Cabecera
+    g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.20f), 0.0f, 0.0f,
+                                           Neon::sky.withAlpha(0.03f), (float) w, 0.0f, false));
+    g.fillRect(0.0f, 0.0f, (float) w, (float) headerH);
 
-    drawPanel(g, { pad, top, colW, h },                    "GATE · COMP", Neon::sky);
-    drawPanel(g, { pad + (colW + pad), top, colW, h },     "EQ · 4 BAND", Neon::mint);
-    drawPanel(g, { pad + 2 * (colW + pad), top, colW, h }, "SFX · REVERB", Neon::violet);
-    drawPanel(g, { pad + 3 * (colW + pad), top, colW, h }, "OUTPUT", Neon::amber);
+    g.setGradientFill(juce::ColourGradient(Neon::violet, 0.0f, (float) headerH - 1.0f,
+                                           Neon::sky, (float) w, (float) headerH - 1.0f, false));
+    g.fillRect(0.0f, (float) headerH - 1.0f, (float) w, 1.0f);
 
-    drawEqCurve(g, { pad + (colW + pad) + 12.0f, top + 140.0f, colW - 24.0f, 150.0f });
+    // Barras decorativas en la cabecera
+    for (int i = 0; i < 6; ++i)
+    {
+        const float bh = 8.0f + (float) ((i * 7) % 5) * 4.0f;
+        g.setColour(i % 2 == 0 ? Neon::mint : Neon::sky);
+        g.fillRoundedRectangle((float) w - 40.0f - (float) i * 12.0f, 34.0f - bh * 0.5f, 6.0f, bh, 2.0f);
+    }
 
-    const float meterY = getHeight() - 14.0f;
-    g.setColour(Neon::grid);
-    g.fillRect(pad, meterY, getWidth() - 2 * pad, 4.0f);
-    g.setColour(Neon::mint);
-    g.fillRect(pad, meterY, (getWidth() - 2 * pad) * juce::jlimit(0.0f, 1.0f, inLevel), 4.0f);
-    g.setColour(Neon::amber);
-    g.fillRect(pad, meterY - 8.0f, (getWidth() - 2 * pad) * juce::jlimit(0.0f, 1.0f, outLevel), 4.0f);
+    // Paneles
+    const juce::Colour accents[] = { Neon::sky, Neon::mint, Neon::violet, Neon::amber };
+    const juce::String names[]   = { "GATE / COMP", "EQ  //  4 BAND", "SFX / REVERB", "OUTPUT" };
+    for (int i = 0; i < 4; ++i)
+        drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i]);
+
+    // Curva y nombres de banda del EQ
+    const auto eq = eqLayout(panelRect(1, w, h));
+    drawEqCurve(g, eq.curve.toFloat());
+
+    const juce::String bandNames[] = { "LOW", "LO-MID", "HI-MID", "HIGH" };
+    const auto nameCells = cellsOf(eq.names, 4, 1);
+    g.setColour(Neon::muted);
+    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    for (int b = 0; b < 4; ++b)
+        g.drawText(bandNames[b], nameCells[(size_t) b], juce::Justification::centred, false);
+
+    // Medidores de entrada y salida
+    const auto meter = meterArea(panelRect(3, w, h));
+    const auto inBar  = meter.withSizeKeepingCentre(14, meter.getHeight()).translated(-12, 0);
+    const auto outBar = meter.withSizeKeepingCentre(14, meter.getHeight()).translated(12, 0);
+    drawMeter(g, inBar,  inLevel,  Neon::mint);
+    drawMeter(g, outBar, outLevel, Neon::amber);
 }
 
 void VoxStudioEditor::resized()
 {
-    title.setBounds(20, 12, 400, 30);
-    subtitle.setBounds(20, 44, 800, 18);
+    const int w = getWidth();
+    const int h = getHeight();
 
-    const float pad = 16.0f;
-    const int top = 84;
-    const int colW = (int) ((getWidth() - pad * 5.0f) / 4.0f);
-    const int h = getHeight() - top - 16 - 24;
+    title.setBounds(24, 14, 320, 30);
+    subtitle.setBounds(24, 46, 700, 18);
 
-    auto col = [&](int i)
-    {
-        return juce::Rectangle<int>(16 + i * (colW + 16), top + 26, colW, h - 26).reduced(10, 0);
-    };
-
-    // Columna 1: gate y compresor
-    auto c1 = col(0);
-    auto gateCells = cells(c1.removeFromTop(c1.getHeight() / 3), 2, 1);
+    // 1. GATE / COMP
+    auto p0 = innerRect(panelRect(0, w, h));
+    auto gateRow = p0.removeFromTop(130);
+    const auto gateCells = cellsOf(gateRow, 2, 1);
     placeKnob(gateThreshold, gateCells[0]);
     placeKnob(gateRelease,   gateCells[1]);
-    auto compCells = cells(c1, 2, 3);
+
+    const auto compCells = cellsOf(p0, 2, 3);
     placeKnob(compThreshold, compCells[0]);
     placeKnob(compRatio,     compCells[1]);
     placeKnob(compAttack,    compCells[2]);
     placeKnob(compRelease,   compCells[3]);
     placeKnob(compMakeup,    compCells[4]);
 
-    // Columna 2: EQ (curva arriba, 4 bandas con 3 perillas cada una abajo)
-    auto c2 = col(1);
-    auto eqBottom = c2.removeFromBottom(c2.getHeight() - 160);
-    const auto bandCells = cells(eqBottom, 4, 1);
+    // 2. EQ
+    const auto eq = eqLayout(panelRect(1, w, h));
+    const auto bandCols = cellsOf(eq.bands, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
-        auto bandArea = bandCells[(size_t) b];
-        auto rows = cells(bandArea, 1, 3);
+        const auto rows = cellsOf(bandCols[(size_t) b], 1, 3);
         placeKnob(eqFreq[b], rows[0]);
         placeKnob(eqGain[b], rows[1]);
         placeKnob(eqQ[b],    rows[2]);
     }
 
-    // Columna 3: SFX y reverb
-    auto c3 = col(2);
-    auto sfxCells = cells(c3.removeFromTop(c3.getHeight() / 2), 3, 1);
+    // 3. SFX / REVERB
+    auto p2 = innerRect(panelRect(2, w, h));
+    const int rowH = (p2.getHeight() - 44) / 2;
+    auto sfxRow    = p2.removeFromTop(rowH);
+    auto presetRow = p2.removeFromTop(44);
+    auto revRow    = p2;
+
+    const auto sfxCells = cellsOf(sfxRow, 3, 1);
     placeKnob(sfxDrive,     sfxCells[0]);
     placeKnob(sfxDelay,     sfxCells[1]);
     placeKnob(sfxDelayTime, sfxCells[2]);
-    presetBox.setBounds(c3.removeFromTop(26).reduced(8, 0));
-    auto revCells = cells(c3, 3, 1);
+
+    presetBox.setBounds(presetRow.reduced(4, 8));
+
+    const auto revCells = cellsOf(revRow, 3, 1);
     placeKnob(revRoom, revCells[0]);
     placeKnob(revDamp, revCells[1]);
     placeKnob(revMix,  revCells[2]);
 
-    // Columna 4: salida
-    auto c4 = col(3);
-    placeKnob(outGain, c4.removeFromTop(c4.getHeight() / 2));
+    // 4. OUTPUT (la zona de medidores queda libre abajo)
+    auto p3 = innerRect(panelRect(3, w, h));
+    p3.removeFromBottom(150);
+    const int knobSize = juce::jmin(p3.getWidth(), p3.getHeight());
+    placeKnob(outGain, p3.withSizeKeepingCentre(p3.getWidth(), knobSize));
 }
