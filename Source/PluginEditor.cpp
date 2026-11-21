@@ -10,12 +10,11 @@ namespace Neon
     const juce::Colour mint    { 0xff2dd4bf };
     const juce::Colour amber   { 0xfffbbf24 };
     const juce::Colour text    { 0xffeee9ff };
-    const juce::Colour muted   { 0xff6b64905 };
+    const juce::Colour muted   { 0xff6b6490 };
 }
 
 namespace
 {
-    // Panel con esquinas biseladas y título con brillo de color
     void drawPanel(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& name, juce::Colour accent)
     {
         const float c = 12.0f;
@@ -36,7 +35,6 @@ namespace
         g.setColour(accent.withAlpha(0.55f));
         g.strokePath(p, juce::PathStrokeType(1.2f));
 
-        // Brillo superior del color del módulo
         juce::ColourGradient glow(accent.withAlpha(0.35f), r.getX(), r.getY(),
                                   accent.withAlpha(0.0f), r.getX(), r.getY() + 60.0f, false);
         g.setGradientFill(glow);
@@ -48,7 +46,6 @@ namespace
                    juce::Justification::centredLeft, false);
     }
 
-    // Reparte un área en celdas (cols x rows)
     std::vector<juce::Rectangle<int>> cells(juce::Rectangle<int> a, int cols, int rows)
     {
         std::vector<juce::Rectangle<int>> out;
@@ -93,20 +90,17 @@ void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int widt
     const float cy = b.getCentreY();
     const float angle = startAngle + sliderPos * (endAngle - startAngle);
 
-    // Anillo de fondo
     juce::Path ring;
     ring.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, endAngle, true);
     g.setColour(Neon::grid);
     g.strokePath(ring, juce::PathStrokeType(3.0f));
 
-    // Anillo de valor con degradado violeta → celeste → menta
     juce::Path value;
     value.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, angle, true);
     juce::ColourGradient grad(Neon::violet, cx - radius, cy, Neon::mint, cx + radius, cy, false);
     g.setGradientFill(grad);
     g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    // Cuerpo oscuro y punto indicador
     const float body = radius * 0.62f;
     g.setColour(Neon::bg);
     g.fillEllipse(cx - body, cy - body, body * 2.0f, body * 2.0f);
@@ -214,14 +208,13 @@ void VoxStudioEditor::drawEqCurve(juce::Graphics& g, juce::Rectangle<float> area
 
         for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
         {
-            const float f0 = (float) processor.apvts.getRawParameterValue(
+            const float f0 = processor.apvts.getRawParameterValue(
                 "eq" + juce::String(b + 1) + "_freq")->load();
-            const float g0 = (float) processor.apvts.getRawParameterValue(
+            const float g0 = processor.apvts.getRawParameterValue(
                 "eq" + juce::String(b + 1) + "_gain")->load();
-            const float q  = (float) processor.apvts.getRawParameterValue(
+            const float q  = processor.apvts.getRawParameterValue(
                 "eq" + juce::String(b + 1) + "_q")->load();
 
-            // Aproximación visual de campana (solo dibujo)
             const float x = std::log2(freq / f0);
             db += g0 * std::exp(-x * x * q * 2.0f);
         }
@@ -241,7 +234,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
 {
     g.fillAll(Neon::bg);
 
-    // Cabecera
     g.setColour(Neon::violet.withAlpha(0.15f));
     g.fillRect(0, 0, getWidth(), 70);
     g.setColour(Neon::sky.withAlpha(0.7f));
@@ -252,16 +244,13 @@ void VoxStudioEditor::paint(juce::Graphics& g)
     const float colW = (getWidth() - pad * 5.0f) / 4.0f;
     const float h = getHeight() - top - pad;
 
-    // Columnas de módulos
-    drawPanel(g, { pad, top, colW, h },                        "GATE · COMP", Neon::sky);
-    drawPanel(g, { pad + (colW + pad), top, colW, h },         "EQ · 4 BAND", Neon::mint);
-    drawPanel(g, { pad + 2 * (colW + pad), top, colW, h },     "SFX · REVERB", Neon::violet);
-    drawPanel(g, { pad + 3 * (colW + pad), top, colW, h },     "OUTPUT", Neon::amber);
+    drawPanel(g, { pad, top, colW, h },                    "GATE · COMP", Neon::sky);
+    drawPanel(g, { pad + (colW + pad), top, colW, h },     "EQ · 4 BAND", Neon::mint);
+    drawPanel(g, { pad + 2 * (colW + pad), top, colW, h }, "SFX · REVERB", Neon::violet);
+    drawPanel(g, { pad + 3 * (colW + pad), top, colW, h }, "OUTPUT", Neon::amber);
 
-    // Curva del EQ dentro de su panel
     drawEqCurve(g, { pad + (colW + pad) + 12.0f, top + 140.0f, colW - 24.0f, 150.0f });
 
-    // Medidores de entrada y salida (barras finas)
     const float meterY = getHeight() - 14.0f;
     g.setColour(Neon::grid);
     g.fillRect(pad, meterY, getWidth() - 2 * pad, 4.0f);
@@ -291,23 +280,24 @@ void VoxStudioEditor::resized()
     auto gateCells = cells(c1.removeFromTop(c1.getHeight() / 3), 2, 1);
     placeKnob(gateThreshold, gateCells[0]);
     placeKnob(gateRelease,   gateCells[1]);
-    auto compCells = cells(c1, 2, 2);
+    auto compCells = cells(c1, 2, 3);
     placeKnob(compThreshold, compCells[0]);
     placeKnob(compRatio,     compCells[1]);
     placeKnob(compAttack,    compCells[2]);
     placeKnob(compRelease,   compCells[3]);
-    presetBox.setBounds(0, 0, 0, 0);
+    placeKnob(compMakeup,    compCells[4]);
 
     // Columna 2: EQ (curva arriba, 4 bandas con 3 perillas cada una abajo)
     auto c2 = col(1);
     auto eqBottom = c2.removeFromBottom(c2.getHeight() - 160);
+    const auto bandCells = cells(eqBottom, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
-        auto band = cells(eqBottom, 4, 1)[(size_t) b];
-        auto bandCells = cells(band, 1, 3);
-        placeKnob(eqFreq[b], bandCells[0]);
-        placeKnob(eqGain[b], bandCells[1]);
-        placeKnob(eqQ[b],    bandCells[2]);
+        auto bandArea = bandCells[(size_t) b];
+        auto rows = cells(bandArea, 1, 3);
+        placeKnob(eqFreq[b], rows[0]);
+        placeKnob(eqGain[b], rows[1]);
+        placeKnob(eqQ[b],    rows[2]);
     }
 
     // Columna 3: SFX y reverb
