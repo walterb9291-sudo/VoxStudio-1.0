@@ -43,10 +43,12 @@ namespace
         return out;
     }
 
-    void placeKnob(VoxStudioEditor::Knob& k, juce::Rectangle<int> cell)
+    // Perilla con etiqueta abajo, tamaño fijo y centrada en su celda
+    void placeKnob(VoxStudioEditor::Knob& k, juce::Rectangle<int> cell, int size)
     {
-        k.label.setBounds(cell.removeFromBottom(16));
-        k.slider.setBounds(cell.reduced(2));
+        k.label.setBounds(cell.removeFromBottom(12));
+        const int s = juce::jmin(size, juce::jmin(cell.getWidth(), cell.getHeight()));
+        k.slider.setBounds(cell.getCentreX() - s / 2, cell.getCentreY() - s / 2, s, s);
     }
 
     juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
@@ -207,7 +209,6 @@ juce::Font NeonLookAndFeel::getComboBoxFont(juce::ComboBox&)
 void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
                                    int, int, int, int, juce::ComboBox&)
 {
-    // Fondo sobrio, sin borde pesado; solo una línea violeta fina abajo
     auto r = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height);
     g.setColour(Neon::panel.withAlpha(0.6f));
     g.fillRoundedRectangle(r, 3.0f);
@@ -216,7 +217,6 @@ void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, boo
                                            Neon::violet, r.getRight() - 6.0f, r.getBottom(), false));
     g.fillRect(r.getX() + 6.0f, r.getBottom() - 1.0f, r.getWidth() - 12.0f, 1.0f);
 
-    // Flecha pequeña en trazo fino
     juce::Path arrow;
     arrow.startNewSubPath(width - 14.0f, height * 0.44f);
     arrow.lineTo(width - 10.5f, height * 0.60f);
@@ -314,9 +314,9 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setResizable(false, false);
     setLookAndFeel(&lnf);
 
-    title.setText("VOXSTUDIO", juce::dontSendNotification);
-    title.setFont(juce::FontOptions(24.0f, juce::Font::bold));
-    title.setColour(juce::Label::textColourId, Neon::text);
+    title.setText("VoxStudio", juce::dontSendNotification);
+    title.setFont(juce::FontOptions("Segoe UI", 22.0f, juce::Font::bold | juce::Font::italic));
+    title.setColour(juce::Label::textColourId, Neon::mint);
     addAndMakeVisible(title);
 
     subtitle.setText("1.0   /   COMP   EQ   SFX   REVERB   DELAY", juce::dontSendNotification);
@@ -330,6 +330,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     producer.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(producer);
 
+    // Selector de reverb en la cabecera, sobre la columna SFX
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
     addAndMakeVisible(presetBox);
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
@@ -344,6 +345,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         addAndMakeVisible(divButtons[i]);
     }
 
+    // BYPASS en la cabecera, sobre la columna DELAY
     bypassButton.setClickingTogglesState(true);
     addAndMakeVisible(bypassButton);
     bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(
@@ -365,6 +367,8 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         setupKnob(eqFreq[b], n + "freq", "FREQ");
         setupKnob(eqGain[b], n + "gain", "GAIN");
         setupKnob(eqQ[b],    n + "q",    "Q");
+        eqQ[b].slider.setVisible(false);
+        eqQ[b].label.setVisible(false);
     }
 
     setupKnob(sfxDrive, "sfx_drive", "DRIVE");
@@ -396,7 +400,7 @@ void VoxStudioEditor::setupKnob(Knob& k, const juce::String& paramID, const juce
     addAndMakeVisible(k.slider);
 
     k.label.setText(text, juce::dontSendNotification);
-    k.label.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    k.label.setFont(juce::FontOptions(8.5f, juce::Font::bold));
     k.label.setColour(juce::Label::textColourId, Neon::muted);
     k.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(k.label);
@@ -607,6 +611,7 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
+    // Visual del delay: ecos decrecientes
     {
         auto d = innerRect(panelRect(3, w, h)).withTrimmedTop(230);
         const int taps = 6;
@@ -631,44 +636,50 @@ void VoxStudioEditor::resized()
     const int w = getWidth();
     const int h = getHeight();
 
+    // Cabecera: misma cuadrícula que los paneles
     title.setBounds(24, 14, 320, 30);
-    subtitle.setBounds(24, 46, 700, 18);
-    producer.setBounds(w - 120, 14, 96, 14);
-    bypassButton.setBounds(w - 120, 44, 96, 22);
+    subtitle.setBounds(24, 46, 500, 18);
 
+    const auto c2 = panelRect(2, w, h);
+    const auto c3 = panelRect(3, w, h);
+    presetBox.setBounds(c2.getX(), 20, c2.getWidth(), 26);
+    bypassButton.setBounds(c3.getX(), 20, c3.getWidth(), 26);
+    producer.setBounds(c3.getX(), 50, c3.getWidth(), 14);
+
+    // COMPRESSOR (sin cambios de tamaño)
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(112);
-    placeKnob(compThreshold, p0.removeFromTop(90).reduced(40, 0));
+    placeKnob(compThreshold, p0.removeFromTop(90).reduced(40, 0), 80);
     const auto compCells = cellsOf(p0, 2, 2);
-    placeKnob(compRatio,   compCells[0]);
-    placeKnob(compAttack,  compCells[1]);
-    placeKnob(compRelease, compCells[2]);
-    placeKnob(compMakeup,  compCells[3]);
+    placeKnob(compRatio,   compCells[0], 40);
+    placeKnob(compAttack,  compCells[1], 40);
+    placeKnob(compRelease, compCells[2], 40);
+    placeKnob(compMakeup,  compCells[3], 40);
 
+    // EQ: perillas FREQ y GAIN más chicas, con espacio entre bandas
     auto p1 = innerRect(panelRect(1, w, h));
     p1.removeFromTop(270);
     const auto bandCols = cellsOf(p1, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
-        const auto rows = cellsOf(bandCols[(size_t) b], 1, 3);
-        placeKnob(eqFreq[b], rows[0]);
-        placeKnob(eqGain[b], rows[1]);
-        placeKnob(eqQ[b],    rows[2]);
+        const auto rows = cellsOf(bandCols[(size_t) b], 1, 2);
+        placeKnob(eqFreq[b], rows[0], 34);
+        placeKnob(eqGain[b], rows[1], 34);
     }
 
+    // SFX / REVERB: drive arriba, perillas de reverb abajo
     auto p2 = innerRect(panelRect(2, w, h));
-    auto top2 = p2.removeFromTop(150);
-    placeKnob(sfxDrive, top2.reduced(40, 0));
-    auto presetRow = p2.removeFromTop(44);
-    presetBox.setBounds(presetRow.reduced(4, 12));
+    auto top2 = p2.removeFromTop(120);
+    placeKnob(sfxDrive, top2, 40);
     const auto revCells = cellsOf(p2, 3, 1);
-    placeKnob(revRoom, revCells[0]);
-    placeKnob(revDamp, revCells[1]);
-    placeKnob(revMix,  revCells[2]);
+    placeKnob(revRoom, revCells[0].reduced(4, 0), 30);
+    placeKnob(revDamp, revCells[1].reduced(4, 0), 30);
+    placeKnob(revMix,  revCells[2].reduced(4, 0), 30);
 
+    // DELAY: mezcla arriba, divisiones en 2 filas de 4 abajo
     auto p3 = innerRect(panelRect(3, w, h));
     auto top3 = p3.removeFromTop(120);
-    placeKnob(delayMix, top3.reduced(40, 0));
+    placeKnob(delayMix, top3, 40);
     auto divArea = p3.removeFromTop(50).reduced(2, 4);
     const int cw = divArea.getWidth() / 4;
     const int rh = divArea.getHeight() / 2;
@@ -679,6 +690,7 @@ void VoxStudioEditor::resized()
         divButtons[i].setBounds(divArea.getX() + col * cw, divArea.getY() + row * rh, cw - 3, rh - 3);
     }
 
+    // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
     inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
