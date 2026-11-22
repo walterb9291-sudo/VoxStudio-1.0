@@ -330,8 +330,19 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     producer.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(producer);
 
-    // Selector de reverb en la cabecera, sobre la columna SFX
-    presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
+     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
+
+    // Colores propios del selector: texto, fondo, flecha y lista desplegable
+    presetBox.setColour(juce::ComboBox::backgroundColourId, Neon::panel);
+    presetBox.setColour(juce::ComboBox::textColourId, Neon::mint);
+    presetBox.setColour(juce::ComboBox::outlineColourId, Neon::violet.withAlpha(0.4f));
+    presetBox.setColour(juce::ComboBox::arrowColourId, Neon::violet);
+    presetBox.setColour(juce::PopupMenu::backgroundColourId, Neon::panel);
+    presetBox.setColour(juce::PopupMenu::textColourId, Neon::text);
+    presetBox.setColour(juce::PopupMenu::highlightedBackgroundColourId, Neon::violet.withAlpha(0.35f));
+    presetBox.setColour(juce::PopupMenu::highlightedTextColourId, Neon::text);
+    presetBox.setJustificationType(juce::Justification::centredLeft);
+
     addAndMakeVisible(presetBox);
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
