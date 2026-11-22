@@ -59,7 +59,6 @@ namespace
     juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
     juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
 
-    // Perilla con aspecto analógico: aro metálico, tapa oscura, arco de valor y puntero menta
     void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
                         float sliderPos, float startAngle, float endAngle)
     {
@@ -157,7 +156,7 @@ namespace
         g.setColour(accent);
         g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
         g.drawText(name, juce::Rectangle<int>((int) (r.getX() + 40.0f), (int) (r.getY() + 12.0f),
-                                              (int) (r.getWidth() - 50.0f), 18),
+                                              (int) (r.getWidth() - 80.0f), 18),
                    juce::Justification::centredLeft, false);
 
         g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.5f), r.getX() + 18.0f, r.getY() + 38.0f,
@@ -300,7 +299,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     title.setColour(juce::Label::textColourId, Neon::mint);
     addAndMakeVisible(title);
 
-    subtitle.setText("1.0   /   COMP   EQ   SFX   REVERB   DELAY", juce::dontSendNotification);
+    subtitle.setText("1.0   /   COMP   EQ   SFX   REVERB   DELAY   DYNAMICS", juce::dontSendNotification);
     subtitle.setFont(juce::FontOptions(11.0f));
     subtitle.setColour(juce::Label::textColourId, Neon::muted);
     addAndMakeVisible(subtitle);
@@ -375,11 +374,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
-    // DELAY dentro de SFX / REVERB: mezcla y perilla de división
+    // DELAY dentro de SFX / REVERB
     setupKnob(delayMix, "sfx_delay", "D MIX");
     delayMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
-    // Perilla de división: avanza por pasos y muestra 1/1, 1/2, 1/4...
     delayDiv.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     delayDiv.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     delayDiv.slider.setRange(0.0, 7.0, 1.0);
@@ -399,6 +397,20 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayDiv.label.setColour(juce::Label::textColourId, Neon::muted);
     delayDiv.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(delayDiv.label);
+
+    // DYNAMICS: gate, de-esser y frecuencia del de-esser
+    setupKnob(dynGate, "dyn_gate", "GATE");
+    dynGate.slider.setComponentID("readout");
+    dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
+
+    setupKnob(dynDeess, "dyn_deess", "DE-ESS");
+    dynDeess.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+
+    setupKnob(dynFocus, "dyn_focus", "FOCUS");
+    dynFocus.slider.textFromValueFunction = [](double v) {
+        const int hz = (int) (2000.0 * std::pow(5.0, v));
+        return hz >= 1000 ? juce::String(hz / 1000.0, 1) + "k" : juce::String(hz) + " Hz";
+    };
 
     startTimerHz(30);
 }
@@ -437,7 +449,6 @@ void VoxStudioEditor::timerCallback()
     outLevel = juce::jmax(processor.getOutputLevel() * 0.9f, outLevel * 0.85f);
     grLevel  = juce::jmax(processor.getGainReduction() * 0.9f, grLevel * 0.85f);
 
-    // Mantiene la perilla de división sincronizada si cambia desde el host
     const int activeDiv = (int) processor.apvts.getRawParameterValue("sfx_delay_div")->load();
     if ((int) std::round(delayDiv.slider.getValue()) != activeDiv)
         delayDiv.slider.setValue(activeDiv, juce::dontSendNotification);
@@ -575,8 +586,8 @@ void VoxStudioEditor::paint(juce::Graphics& g)
     g.fillRect(0.0f, (float) headerH - 1.0f, (float) w, 1.0f);
 
     const juce::Colour accents[] = { Neon::sky, Neon::mint, Neon::violet, Neon::amber };
-    const juce::String names[]   = { "COMPRESSOR", "EQ  4 BAND", "SFX / REV / DELAY", "MODULE" };
-    const int icons[]            = { 1, 1, 2, 3 };
+    const juce::String names[]   = { "COMPRESSOR", "EQ  4 BAND", "SFX / REV / DELAY", "DYNAMICS" };
+    const int icons[]            = { 1, 1, 2, 0 };
     for (int i = 0; i < 4; ++i)
         drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i], icons[i]);
 
@@ -646,13 +657,14 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    // Columna 4 libre: espacio para el módulo que se agregará después
+    // LED de gate: verde cuando la voz pasa
     {
-        auto m = innerRect(panelRect(3, w, h));
-        g.setColour(Neon::muted);
-        g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
-        g.drawText("PENDIENTE", m.withTrimmedTop(m.getHeight() / 2 - 10).withHeight(20),
-                   juce::Justification::centred, false);
+        const auto p3 = panelRect(3, w, h).toFloat();
+        const juce::Colour ledCol = processor.getGateOpen() ? Neon::mint : Neon::grid;
+        g.setColour(ledCol.withAlpha(0.3f));
+        g.fillEllipse(p3.getRight() - 34.0f, p3.getY() + 12.0f, 16.0f, 16.0f);
+        g.setColour(ledCol);
+        g.fillEllipse(p3.getRight() - 29.0f, p3.getY() + 17.0f, 6.0f, 6.0f);
     }
 
     drawMeter(g, footerInMeter(h),     inLevel);
@@ -665,7 +677,7 @@ void VoxStudioEditor::resized()
     const int h = getHeight();
 
     title.setBounds(24, 14, 320, 30);
-    subtitle.setBounds(24, 46, 500, 18);
+    subtitle.setBounds(24, 46, 600, 18);
 
     const auto c3 = panelRect(3, w, h);
     bypassButton.setBounds(c3.getX(), 20, c3.getWidth(), 26);
@@ -692,7 +704,7 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 46);
     }
 
-    // SFX / REVERB / DELAY: DRIVE, selector de preset, reverb, y luego delay
+    // SFX / REVERB / DELAY: DRIVE, selector de preset, reverb, y delay abajo
     auto p2 = innerRect(panelRect(2, w, h));
 
     placeKnob(sfxDrive, p2.removeFromTop(110), 96);
@@ -708,15 +720,19 @@ void VoxStudioEditor::resized()
     p2.removeFromTop(10);
 
     const auto dlyCells = cellsOf(p2, 2, 1);
-    placeKnob(delayMix, dlyCells[0], 56);
-    placeKnob(delayDiv, dlyCells[1], 56);
+    placeKnob(delayMix, dlyCells[0], 84);
+    placeKnob(delayDiv, dlyCells[1], 84);
+
+    // DYNAMICS: GATE grande arriba, DE-ESS y FOCUS abajo
+    auto p3 = innerRect(panelRect(3, w, h));
+    placeKnob(dynGate, p3.removeFromTop(150).reduced(10, 0), 110);
+    const auto dynCells = cellsOf(p3, 2, 1);
+    placeKnob(dynDeess, dynCells[0].reduced(2, 0), 76);
+    placeKnob(dynFocus, dynCells[1].reduced(2, 0), 76);
 
     // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
     inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
 
-    outGain.slider.setBounds(w - pad - 56, h - footerH + 6, 56, 56);
-    outGain.label.setBounds(w - pad - 134, h - footerH + 30, 70, 14);
-    outGain.label.setJustificationType(juce::Justification::right);
-}
+    outGain.slider.setBounds(w -
