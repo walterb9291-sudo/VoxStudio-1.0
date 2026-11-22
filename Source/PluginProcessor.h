@@ -41,6 +41,7 @@ public:
     float getInputLevel() const { return inputLevel.load(); }
     float getOutputLevel() const { return outputLevel.load(); }
     float getGainReduction() const { return gainReductionDb.load(); }
+    bool getGateOpen() const { return gateOpen.load(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
@@ -48,7 +49,9 @@ private:
     void updateCompressor();
     void updateReverb();
     void updateEq();
+    void updateDeEsser();
     void processDynamics(juce::AudioBuffer<float>& buffer);
+    void processDeEsser(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
     double delayTimeMs() const;
 
@@ -65,8 +68,11 @@ private:
     using Filter = juce::dsp::IIR::Filter<float>;
     using FilterBand = juce::dsp::ProcessorDuplicator<Filter, juce::dsp::IIR::Coefficients<float>>;
     std::array<FilterBand, numEqBands> eqBands;
+    FilterBand deEsserBand;
 
     std::array<float, 2> gateEnvelope { 0.0f, 0.0f };
+    float deEsserEnv = 0.0f;
+    juce::AudioBuffer<float> sideBuffer;
 
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
@@ -74,6 +80,7 @@ private:
     std::atomic<float> inputLevel { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
     std::atomic<float> gainReductionDb { 0.0f };
+    std::atomic<bool> gateOpen { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoxStudioProcessor)
 };
