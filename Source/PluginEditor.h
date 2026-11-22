@@ -66,6 +66,7 @@ private:
     Knob eqQ[VoxStudioProcessor::numEqBands];
     Knob sfxDrive, delayMix, delayDiv;
     Knob revRoom, revDamp, revMix;
+    Knob dynGate, dynDeess, dynFocus;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
