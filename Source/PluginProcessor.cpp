@@ -26,10 +26,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterFloat>("in_gain", "Input",
         juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("gate_threshold", "Gate Threshold",
+    // Dynamics: gate (dB), de-esser (cantidad) y frecuencia del de-esser (0 a 1)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_gate", "Gate",
         juce::NormalisableRange<float>(-80.0f, 0.0f, 0.1f), -50.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("gate_release", "Gate Release",
-        juce::NormalisableRange<float>(5.0f, 500.0f, 0.1f, 0.4f), 80.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_deess", "De-Ess",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_focus", "Focus",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_threshold", "Threshold",
         juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -18.0f));
@@ -90,6 +93,11 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     for (auto& band : eqBands)
         band.prepare(spec);
+    deEsserBand.prepare(spec);
+
+    sideBuffer.setSize(2, samplesPerBlock);
+    sideBuffer.clear();
+    deEsserEnv = 0.0f;
 
     const int maxDelay = static_cast<int>(sampleRate) + 1;
     delayBuffer.setSize(2, maxDelay);
@@ -156,12 +164,22 @@ void VoxStudioProcessor::updateEq()
     }
 }
 
+void VoxStudioProcessor::updateDeEsser()
+{
+    // FOCUS de 0 a 1 => frecuencia de 2 kHz a 10 kHz
+    const float focus = apvts.getRawParameterValue("dyn_focus")->load();
+    const float freq = 2000.0f * std::pow(5.0f, focus);
+
+    auto coeffs = juce::dsp::IIR::Coefficients<float>::makeBandPass(currentSampleRate, freq, 2.0f);
+    *deEsserBand.state = *coeffs;
+}
+
+// Gate: silencia cuando la señal baja del umbral (dyn_gate en dB)
 void VoxStudioProcessor::processDynamics(juce::AudioBuffer<float>& buffer)
 {
     const float threshold = juce::Decibels::decibelsToGain(
-        apvts.getRawParameterValue("gate_threshold")->load());
-    const float releaseSec = apvts.getRawParameterValue("gate_release")->load() * 0.001f;
-    const float releaseCoeff = std::exp(-1.0f / (releaseSec * (float) currentSampleRate));
+        apvts.getRawParameterValue("dyn_gate")->load());
+    const float releaseCoeff = std::exp(-1.0f / (0.080f * (float) currentSampleRate));
 
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
     {
@@ -176,11 +194,59 @@ void VoxStudioProcessor::processDynamics(juce::AudioBuffer<float>& buffer)
                 data[i] = 0.0f;
         }
     }
+
+    gateOpen.store(gateEnvelope[0] >= threshold);
+}
+
+// De-Esser: detecta energía en la banda de FOCUS y reduce la ganancia de todo el audio
+void VoxStudioProcessor::processDeEsser(juce::AudioBuffer<float>& buffer)
+{
+    const float amount = apvts.getRawParameterValue("dyn_deess")->load();
+    if (amount <= 0.001f || buffer.getNumChannels() < 2)
+        return;
+
+    const int n = buffer.getNumSamples();
+    if (sideBuffer.getNumSamples() < n)
+        sideBuffer.setSize(2, n, false, false, true);
+
+    for (int ch = 0; ch < 2; ++ch)
+        sideBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
+
+    updateDeEsser();
+    juce::dsp::AudioBlock<float> sideBlock(sideBuffer.getArrayOfWritePointers(), (size_t) 2, (size_t) n);
+    juce::dsp::ProcessContextReplacing<float> sideCtx(sideBlock);
+    deEsserBand.process(sideCtx);
+
+    const float* s0 = sideBuffer.getReadPointer(0);
+    const float* s1 = sideBuffer.getReadPointer(1);
+    float* d0 = buffer.getWritePointer(0);
+    float* d1 = buffer.getWritePointer(1);
+
+    const float attack  = std::exp(-1.0f / (0.001f * (float) currentSampleRate));
+    const float release = std::exp(-1.0f / (0.060f * (float) currentSampleRate));
+    const float thrDb   = -28.0f;
+    const float maxRedDb = amount * 12.0f;
+    float envelope = deEsserEnv;
+
+    for (int i = 0; i < n; ++i)
+    {
+        const float level = juce::jmax(std::abs(s0[i]), std::abs(s1[i]));
+        envelope = (level > envelope) ? attack * envelope + (1.0f - attack) * level
+                                      : release * envelope + (1.0f - release) * level;
+
+        const float envDb = juce::Decibels::gainToDecibels(envelope, -100.0f);
+        const float reduceDb = juce::jmin(juce::jmax(0.0f, envDb - thrDb) * 0.6f, maxRedDb);
+        const float gain = juce::Decibels::decibelsToGain(-reduceDb);
+
+        d0[i] *= gain;
+        d1[i] *= gain;
+    }
+
+    deEsserEnv = envelope;
 }
 
 double VoxStudioProcessor::delayTimeMs() const
 {
-    // Tempo del host; si no hay, 120 BPM
     double bpm = 120.0;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
@@ -193,14 +259,14 @@ double VoxStudioProcessor::delayTimeMs() const
 
     switch (idx)
     {
-        case 0: return quarterMs * 4.0;        // 1/1
-        case 1: return quarterMs * 2.0;        // 1/2
-        case 2: return quarterMs;              // 1/4
-        case 3: return quarterMs * 0.5;        // 1/8
-        case 4: return quarterMs * 0.25;       // 1/16
-        case 5: return quarterMs * 1.5;        // 1/4 con puntillo
-        case 6: return quarterMs * 0.75;       // 1/8 con puntillo
-        case 7: return quarterMs * (2.0 / 3.0);// 1/4 de tresillo
+        case 0: return quarterMs * 4.0;
+        case 1: return quarterMs * 2.0;
+        case 2: return quarterMs;
+        case 3: return quarterMs * 0.5;
+        case 4: return quarterMs * 0.25;
+        case 5: return quarterMs * 1.5;
+        case 6: return quarterMs * 0.75;
+        case 7: return quarterMs * (2.0 / 3.0);
         default: return quarterMs;
     }
 }
@@ -266,6 +332,7 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     {
         outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
         gainReductionDb.store(0.0f);
+        gateOpen.store(false);
         return;
     }
 
@@ -275,12 +342,16 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     inputGain.setGainDecibels(apvts.getRawParameterValue("in_gain")->load());
     inputGain.process(ctx);
 
+    // 1. Gate
     processDynamics(buffer);
 
+    // 2. De-Esser
+    processDeEsser(buffer);
+
+    // 3. Compresor
     updateCompressor();
     compressor.process(ctx);
 
-    // Reducción de ganancia aproximada para la aguja del VU
     {
         const float peakIn  = juce::jmax(0.0001f, buffer.getMagnitude(0, buffer.getNumSamples()));
         const float thrLin  = juce::Decibels::decibelsToGain(apvts.getRawParameterValue("comp_threshold")->load());
@@ -292,19 +363,24 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         gainReductionDb.store(reduction);
     }
 
+    // 4. Makeup
     makeupGain.setGainDecibels(apvts.getRawParameterValue("comp_makeup")->load());
     makeupGain.process(ctx);
 
+    // 5. EQ paramétrico
     updateEq();
     for (int b = 0; b < numEqBands; ++b)
         eqBands[(size_t) b].process(ctx);
 
+    // 6. SFX (saturación + delay)
     processSFX(buffer);
 
+    // 7. Reverb
     updateReverb();
     if (buffer.getNumChannels() >= 2)
         reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), buffer.getNumSamples());
 
+    // 8. Salida
     outputGain.setGainDecibels(apvts.getRawParameterValue("out_gain")->load());
     outputGain.process(ctx);
 
