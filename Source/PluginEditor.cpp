@@ -735,4 +735,7 @@ void VoxStudioEditor::resized()
     inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
 
-    outGain.slider.setBounds(w -
+    outGain.slider.setBounds(w - pad - 56, h - footerH + 6, 56, 56);
+    outGain.label.setBounds(w - pad - 134, h - footerH + 30, 70, 14);
+    outGain.label.setJustificationType(juce::Justification::right);
+}
