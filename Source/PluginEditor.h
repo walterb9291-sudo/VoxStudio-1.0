@@ -56,9 +56,6 @@ private:
     juce::ComboBox presetBox;
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
 
-    static constexpr int numDivButtons = 8;
-    juce::TextButton divButtons[numDivButtons];
-
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
@@ -67,8 +64,7 @@ private:
     Knob eqFreq[VoxStudioProcessor::numEqBands];
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
-    Knob sfxDrive;
-    Knob delayMix;
+    Knob sfxDrive, delayMix, delayDiv;
     Knob revRoom, revDamp, revMix;
 
     int draggingBand = -1;
