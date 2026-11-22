@@ -708,8 +708,8 @@ void VoxStudioEditor::resized()
     p2.removeFromTop(10);
 
     const auto dlyCells = cellsOf(p2, 2, 1);
-    placeKnob(delayMix,  dlyCells[0], 56);
-    placeKnob(delayDiv,  dlyCells[1], 56);
+    placeKnob(delayMix, dlyCells[0], 56);
+    placeKnob(delayDiv, dlyCells[1], 56);
 
     // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
