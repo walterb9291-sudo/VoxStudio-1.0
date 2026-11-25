@@ -2,21 +2,27 @@
 
 namespace Neon
 {
-    const juce::Colour bg      { 0xff05040b };
-    const juce::Colour panel   { 0xff0a0816 };
-    const juce::Colour panelHi { 0xff19122f };
-    const juce::Colour grid    { 0xff2a2150 };
+    const juce::Colour bg      { 0xff07080d };
+    const juce::Colour panel   { 0xff0c0e16 };
+    const juce::Colour panelHi { 0xff141827 };
+    const juce::Colour grid    { 0xff1d2233 };
     const juce::Colour violet  { 0xffa855f7 };
-    const juce::Colour sky     { 0xff38bdf8 };
-    const juce::Colour mint    { 0xff2dd4bf };
-    const juce::Colour amber   { 0xfffbbf24 };
-    const juce::Colour text    { 0xffeee9ff };
-    const juce::Colour muted   { 0xff6b6490 };
+    const juce::Colour sky     { 0xff22d3ee };
+    const juce::Colour mint    { 0xff22c55e };
+    const juce::Colour amber   { 0xfff59e0b };
+    const juce::Colour blue    { 0xff38bdf8 };
+    const juce::Colour purple  { 0xffa855f7 };
+    const juce::Colour pink    { 0xffd946ef };
+    const juce::Colour yellow  { 0xffeab308 };
+    const juce::Colour text    { 0xfff3f4f6 };
+    const juce::Colour muted   { 0xff6b7280 };
 }
 
 namespace
 {
-    constexpr int pad      = 16;
+    constexpr int pad      = 12;
+    constexpr int sideW    = 56;
+    constexpr int gap      = 10;
     constexpr int headerH  = 74;
     constexpr int panelTop = 88;
     constexpr int footerH  = 72;
@@ -25,13 +31,13 @@ namespace
 
     juce::Rectangle<int> panelRect(int i, int w, int h)
     {
-        const int colW = (w - pad * 5) / 4;
-        return { pad + i * (colW + pad), panelTop, colW, h - panelTop - pad - footerH };
+        const int colW = (w - 2 * sideW - 2 * pad - 3 * gap) / 4;
+        return { sideW + pad + i * (colW + gap), panelTop, colW, h - panelTop - footerH };
     }
 
     juce::Rectangle<int> innerRect(juce::Rectangle<int> p)
     {
-        return p.reduced(14, 0).withTrimmedTop(46).withTrimmedBottom(14);
+        return p.reduced(12, 0).withTrimmedTop(46).withTrimmedBottom(12);
     }
 
     std::vector<juce::Rectangle<int>> cellsOf(juce::Rectangle<int> a, int cols, int rows)
@@ -49,53 +55,16 @@ namespace
         return out;
     }
 
+    void tint(VoxStudioEditor::Knob& k, juce::Colour c)
+    {
+        k.slider.setColour(juce::Slider::rotarySliderFillColourId, c);
+    }
+
     void placeKnob(VoxStudioEditor::Knob& k, juce::Rectangle<int> cell, int size)
     {
         k.label.setBounds(cell.removeFromBottom(12));
         const int s = juce::jmin(size, juce::jmin(cell.getWidth(), cell.getHeight()));
         k.slider.setBounds(cell.getCentreX() - s / 2, cell.getCentreY() - s / 2, s, s);
-    }
-
-    juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
-    juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
-
-    void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
-                        float sliderPos, float startAngle, float endAngle)
-    {
-        const float angle = startAngle + sliderPos * (endAngle - startAngle);
-
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff3a3360), cx, cy - radius,
-                                               juce::Colour(0xff07060f), cx, cy + radius, false));
-        g.fillEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
-        g.setColour(Neon::violet.withAlpha(0.35f));
-        g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 1.0f);
-
-        const float arcR = radius - 4.0f;
-        if (sliderPos > 0.001f)
-        {
-            juce::Path value;
-            value.addCentredArc(cx, cy, arcR, arcR, 0.0f, startAngle, angle, true);
-            g.setGradientFill(juce::ColourGradient(Neon::violet, cx - arcR, cy,
-                                                   Neon::sky, cx + arcR, cy, false));
-            g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved,
-                                                     juce::PathStrokeType::rounded));
-        }
-
-        const float capR = radius * 0.68f;
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff3d3766), cx - capR * 0.35f, cy - capR * 0.45f,
-                                               juce::Colour(0xff0c0a18), cx + capR, cy + capR, true));
-        g.fillEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
-
-        g.setColour(Neon::grid.withAlpha(0.8f));
-        g.drawEllipse(cx - capR * 0.82f, cy - capR * 0.82f, capR * 1.64f, capR * 1.64f, 1.0f);
-
-        const float px0 = cx + capR * 0.15f * std::sin(angle);
-        const float py0 = cy - capR * 0.15f * std::cos(angle);
-        const float px1 = cx + capR * 0.78f * std::sin(angle);
-        const float py1 = cy - capR * 0.78f * std::cos(angle);
-        g.setColour(Neon::mint);
-        g.drawLine(juce::Line<float>(px0, py0, px1, py1), 3.0f);
-        g.fillEllipse(px1 - 3.0f, py1 - 3.0f, 6.0f, 6.0f);
     }
 
     void drawIcon(juce::Graphics& g, juce::Rectangle<float> r, int kind, juce::Colour c)
@@ -148,29 +117,45 @@ namespace
         g.setGradientFill(juce::ColourGradient(Neon::panelHi, r.getX(), r.getY(),
                                                Neon::panel, r.getX(), r.getBottom(), false));
         g.fillPath(shape);
-        g.setColour(accent.withAlpha(0.45f));
-        g.strokePath(shape, juce::PathStrokeType(1.0f));
+        g.setColour(accent.withAlpha(0.7f));
+        g.strokePath(shape, juce::PathStrokeType(1.5f));
 
-        drawIcon(g, { r.getX() + 18.0f, r.getY() + 14.0f, 14.0f, 14.0f }, icon, accent);
+        drawIcon(g, { r.getX() + 16.0f, r.getY() + 14.0f, 14.0f, 14.0f }, icon, accent);
 
         g.setColour(accent);
-        g.setFont(juce::FontOptions(10.5f, juce::Font::bold));
-        g.drawText(name, juce::Rectangle<int>((int) (r.getX() + 40.0f), (int) (r.getY() + 12.0f),
-                                              (int) (r.getWidth() - 80.0f), 18),
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.drawText(name, juce::Rectangle<int>((int) (r.getX() + 36.0f), (int) (r.getY() + 12.0f),
+                                              (int) (r.getWidth() - 46.0f), 18),
                    juce::Justification::centredLeft, false);
 
-        g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.5f), r.getX() + 18.0f, r.getY() + 38.0f,
-                                               accent.withAlpha(0.0f), r.getRight() - 18.0f, r.getY() + 38.0f, false));
-        g.fillRect(r.getX() + 18.0f, r.getY() + 38.0f, r.getWidth() - 36.0f, 1.0f);
+        g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.6f), r.getX() + 16.0f, r.getY() + 38.0f,
+                                               accent.withAlpha(0.0f), r.getRight() - 16.0f, r.getY() + 38.0f, false));
+        g.fillRect(r.getX() + 16.0f, r.getY() + 38.0f, r.getWidth() - 32.0f, 1.0f);
     }
 
-    void drawMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
+    // Medidor lateral segmentado: verde, amarillo y ámbar arriba
+    void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
     {
+        g.setColour(Neon::panel);
+        g.fillRoundedRectangle(r.toFloat(), 6.0f);
         g.setColour(Neon::grid);
-        g.fillRoundedRectangle(r.toFloat(), 2.0f);
-        const float fillW = (float) r.getWidth() * juce::jlimit(0.0f, 1.0f, level);
-        g.setColour(Neon::mint);
-        g.fillRoundedRectangle(r.toFloat().withWidth(fillW), 2.0f);
+        g.drawRoundedRectangle(r.toFloat().reduced(0.5f), 6.0f, 1.0f);
+
+        const int segs = 16;
+        const float lv = juce::jlimit(0.0f, 1.0f, level);
+        const int lit = (int) std::round(lv * segs);
+        const float segH = ((float) r.getHeight() - 14.0f) / (float) segs;
+
+        for (int s = 0; s < segs; ++s)
+        {
+            const float y = (float) r.getBottom() - 7.0f - (s + 1) * segH + 1.0f;
+            juce::Colour c = Neon::mint;
+            if (s >= 11) c = Neon::amber;
+            else if (s >= 8) c = Neon::yellow;
+
+            g.setColour(s < lit ? c : Neon::grid);
+            g.fillRoundedRectangle((float) r.getX() + 8.0f, y, (float) r.getWidth() - 16.0f, segH - 2.0f, 1.5f);
+        }
     }
 
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
@@ -209,7 +194,7 @@ namespace
 
         const float t = juce::jlimit(0.0f, 1.0f, grDb / 20.0f);
         const float a = startA + t * (endA - startA);
-        g.setColour(Neon::mint);
+        g.setColour(Neon::sky);
         g.drawLine(cx, cy, cx + (radius - 6.0f) * std::sin(a), cy - (radius - 6.0f) * std::cos(a), 1.6f);
         g.fillEllipse(cx - 3.0f, cy - 3.0f, 6.0f, 6.0f);
 
@@ -217,6 +202,59 @@ namespace
         g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
         g.drawText("GR dB", juce::Rectangle<float>(r.getRight() - 48.0f, r.getY() + 3.0f, 42.0f, 12.0f),
                    juce::Justification::right, false);
+    }
+
+    // Perilla de plugin: aro de escala, pista, arco de valor y tapa oscura con puntero
+    void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
+                        float sliderPos, float startAngle, float endAngle, juce::Colour accent)
+    {
+        const float angle = startAngle + sliderPos * (endAngle - startAngle);
+        const juce::Colour bright = accent.brighter(0.35f);
+
+        for (int i = 0; i <= 10; ++i)
+        {
+            const float t = (float) i / 10.0f;
+            const float a = startAngle + t * (endAngle - startAngle);
+            const float r1 = radius + 1.0f;
+            const float r2 = radius + (i % 5 == 0 ? 6.0f : 3.5f);
+            g.setColour(t <= sliderPos + 0.001f ? accent : Neon::grid);
+            g.drawLine(cx + r1 * std::sin(a), cy - r1 * std::cos(a),
+                       cx + r2 * std::sin(a), cy - r2 * std::cos(a), 1.5f);
+        }
+
+        const float trackR = radius - 5.0f;
+
+        juce::Path track;
+        track.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, endAngle, true);
+        g.setColour(Neon::grid);
+        g.strokePath(track, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        if (sliderPos > 0.001f)
+        {
+            juce::Path value;
+            value.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, angle, true);
+            g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.25f), cx - trackR, cy,
+                                                   bright.withAlpha(0.25f), cx + trackR, cy, false));
+            g.strokePath(value, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setGradientFill(juce::ColourGradient(accent, cx - trackR, cy, bright, cx + trackR, cy, false));
+            g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+
+        const float capR = radius * 0.66f;
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff2a2f45), cx - capR * 0.35f, cy - capR * 0.45f,
+                                               juce::Colour(0xff07080d), cx + capR, cy + capR, true));
+        g.fillEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
+        g.setColour(accent.withAlpha(0.35f));
+        g.drawEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f, 1.0f);
+
+        const float px0 = cx + capR * 0.15f * std::sin(angle);
+        const float py0 = cy - capR * 0.15f * std::cos(angle);
+        const float px1 = cx + capR * 0.78f * std::sin(angle);
+        const float py1 = cy - capR * 0.78f * std::cos(angle);
+        g.setColour(Neon::text);
+        g.drawLine(juce::Line<float>(px0, py0, px1, py1), 2.5f);
+        g.setColour(bright);
+        g.fillEllipse(px1 - 3.0f, py1 - 3.0f, 6.0f, 6.0f);
     }
 }
 
@@ -227,38 +265,38 @@ NeonLookAndFeel::NeonLookAndFeel()
     setColour(juce::ComboBox::backgroundColourId, Neon::panel);
     setColour(juce::ComboBox::outlineColourId, Neon::grid);
     setColour(juce::ComboBox::textColourId, Neon::mint);
-    setColour(juce::ComboBox::arrowColourId, Neon::violet);
+    setColour(juce::ComboBox::arrowColourId, Neon::sky);
     setColour(juce::PopupMenu::backgroundColourId, Neon::panel);
     setColour(juce::PopupMenu::textColourId, Neon::text);
     setColour(juce::PopupMenu::highlightedBackgroundColourId, Neon::violet.withAlpha(0.35f));
     setColour(juce::PopupMenu::highlightedTextColourId, Neon::text);
     setColour(juce::Slider::textBoxTextColourId, Neon::text);
     setColour(juce::TextButton::buttonColourId, Neon::panel);
-    setColour(juce::TextButton::buttonOnColourId, Neon::sky.withAlpha(0.35f));
-    setColour(juce::TextButton::textColourOffId, Neon::muted);
+    setColour(juce::TextButton::buttonOnColourId, Neon::violet.withAlpha(0.35f));
+    setColour(juce::TextButton::textColourOffId, Neon::text);
     setColour(juce::TextButton::textColourOnId, Neon::text);
 }
 
 juce::Font NeonLookAndFeel::getComboBoxFont(juce::ComboBox&)
 {
-    return juce::Font(juce::FontOptions("Segoe UI", 13.0f, juce::Font::bold | juce::Font::italic));
+    return juce::Font(juce::FontOptions("Segoe UI", 12.0f, juce::Font::bold | juce::Font::italic));
 }
 
 void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
                                    int, int, int, int, juce::ComboBox&)
 {
     const auto r = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height);
-
-    g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.0f), r.getX() + 2.0f, r.getBottom(),
-                                           Neon::violet, r.getRight() - 2.0f, r.getBottom(), false));
-    g.fillRect(r.getX() + 2.0f, r.getBottom() - 1.0f, r.getWidth() - 4.0f, 1.0f);
+    g.setColour(Neon::panel);
+    g.fillRoundedRectangle(r, 6.0f);
+    g.setColour(Neon::sky.withAlpha(0.6f));
+    g.drawRoundedRectangle(r.reduced(0.5f), 6.0f, 1.0f);
 
     juce::Path arrow;
     arrow.startNewSubPath(width - 14.0f, height * 0.44f);
     arrow.lineTo(width - 10.5f, height * 0.60f);
     arrow.lineTo(width - 7.0f, height * 0.44f);
-    g.setColour(Neon::sky.withAlpha(0.8f));
-    g.strokePath(arrow, juce::PathStrokeType(1.0f));
+    g.setColour(Neon::sky);
+    g.strokePath(arrow, juce::PathStrokeType(1.2f));
 }
 
 void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
@@ -270,12 +308,13 @@ void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int widt
     const float cx = area.getCentreX();
     const float cy = area.getCentreY();
 
-    drawAnalogKnob(g, cx, cy, radius, sliderPos, startAngle, endAngle);
+    const juce::Colour accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
+    drawAnalogKnob(g, cx, cy, radius, sliderPos, startAngle, endAngle, accent);
 
     const bool alwaysShow = slider.getComponentID() == "readout";
     if (alwaysShow || slider.isMouseOverOrDragging())
     {
-        const float capR = radius * 0.68f;
+        const float capR = radius * 0.66f;
         g.setColour(Neon::text);
         g.setFont(juce::FontOptions("Segoe UI", juce::jlimit(7.0f, 14.0f, capR * 0.55f), juce::Font::bold));
         g.drawText(slider.getTextFromValue(slider.getValue()),
@@ -293,17 +332,17 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setResizable(false, false);
     setLookAndFeel(&lnf);
 
-    title.setText("VoxStudio", juce::dontSendNotification);
-    title.setFont(juce::FontOptions("Segoe UI", 22.0f, juce::Font::bold | juce::Font::italic));
-    title.setColour(juce::Label::textColourId, Neon::mint);
+    title.setText("VoxStudios", juce::dontSendNotification);
+    title.setFont(juce::FontOptions("Segoe UI", 22.0f, juce::Font::bold));
+    title.setColour(juce::Label::textColourId, Neon::text);
     addAndMakeVisible(title);
 
-    subtitle.setText("1.0   /   COMP   EQ   SFX   REVERB   DELAY   DYNAMICS", juce::dontSendNotification);
-    subtitle.setFont(juce::FontOptions(11.0f));
+    subtitle.setText("Tiem  ·  MEZCLA · COLOR · CARÁCTER", juce::dontSendNotification);
+    subtitle.setFont(juce::FontOptions(10.0f));
     subtitle.setColour(juce::Label::textColourId, Neon::muted);
     addAndMakeVisible(subtitle);
 
-    producer.setText("TIEM", juce::dontSendNotification);
+    producer.setText("1.0", juce::dontSendNotification);
     producer.setFont(juce::FontOptions(9.0f, juce::Font::bold));
     producer.setColour(juce::Label::textColourId, Neon::muted);
     producer.setJustificationType(juce::Justification::centredRight);
@@ -322,6 +361,8 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
 
     setupKnob(inGain,  "in_gain",  "INPUT");
     setupKnob(outGain, "out_gain", "OUTPUT");
+    tint(inGain,  Neon::mint);
+    tint(outGain, Neon::yellow);
     inGain.slider.textFromValueFunction = [](double v) {
         return juce::String(juce::jlimit(0.0, 100.0, (v + 24.0) / 36.0 * 100.0), 0);
     };
@@ -329,12 +370,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         return juce::String(juce::jlimit(0.0, 100.0, (v + 24.0) / 36.0 * 100.0), 0);
     };
 
+    // COMPRESIÓN Y DINÁMICA (celeste)
     setupKnob(compThreshold, "comp_threshold", "THRESHOLD");
     compThreshold.slider.setComponentID("readout");
-    compThreshold.slider.textFromValueFunction = [](double v) {
-        return juce::String(v, 0) + " dB";
-    };
-
+    compThreshold.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
     setupKnob(compRatio,   "comp_ratio",   "RATIO");
     compRatio.slider.textFromValueFunction = [](double v) { return juce::String(v, 1) + ":1"; };
     setupKnob(compAttack,  "comp_attack",  "ATTACK");
@@ -344,6 +383,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(compMakeup,  "comp_makeup",  "MAKEUP");
     compMakeup.slider.textFromValueFunction = [](double v) { return "+" + juce::String(v, 1) + " dB"; };
 
+    tint(compThreshold, Neon::sky);
+    tint(compRatio,     Neon::sky);
+    tint(compAttack,    Neon::sky);
+    tint(compRelease,   Neon::sky);
+    tint(compMakeup,    Neon::sky);
+
+    // EQ 4 BANDAS (azul, verde, ámbar, morado, como tu boceto)
+    const juce::Colour bandCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const juce::String n = "eq" + juce::String(b + 1) + "_";
@@ -358,11 +405,16 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         setupKnob(eqQ[b], n + "q", "Q");
         eqQ[b].slider.setVisible(false);
         eqQ[b].label.setVisible(false);
+
+        tint(eqFreq[b], bandCol[b]);
+        tint(eqGain[b], bandCol[b]);
     }
 
+    // SFX / REVERB / DELAY (magenta)
     setupKnob(sfxDrive, "sfx_drive", "DRIVE");
     sfxDrive.slider.setComponentID("drive");
     sfxDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+    tint(sfxDrive, Neon::pink);
 
     setupKnob(revRoom, "rev_room", "ROOM");
     revRoom.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
@@ -370,8 +422,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     revDamp.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+    tint(revRoom, Neon::pink);
+    tint(revDamp, Neon::pink);
+    tint(revMix,  Neon::pink);
 
-    // Delay: WET, DRY, FEEDBACK, DRIVE y división
     setupKnob(delayMix, "sfx_delay", "WET");
     delayMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
     setupKnob(delayDry, "sfx_delay_dry", "DRY");
@@ -380,6 +434,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayFb.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     setupKnob(delayDrv, "sfx_delay_drv", "DRIVE");
     delayDrv.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+    tint(delayMix, Neon::pink);
+    tint(delayDry, Neon::pink);
+    tint(delayFb,  Neon::pink);
+    tint(delayDrv, Neon::pink);
 
     delayDiv.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     delayDiv.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -395,24 +453,29 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         setDelayDivision((int) std::round(delayDiv.slider.getValue()));
     };
     addAndMakeVisible(delayDiv.slider);
+    delayDiv.slider.setColour(juce::Slider::rotarySliderFillColourId, Neon::pink);
     delayDiv.label.setText("D TIME", juce::dontSendNotification);
     delayDiv.label.setFont(juce::FontOptions(8.5f, juce::Font::bold));
     delayDiv.label.setColour(juce::Label::textColourId, Neon::muted);
     delayDiv.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(delayDiv.label);
 
+    // DYNAMICS (naranja, gate celeste)
     setupKnob(dynGate, "dyn_gate", "GATE");
     dynGate.slider.setComponentID("readout");
     dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
+    tint(dynGate, Neon::sky);
 
     setupKnob(dynDeess, "dyn_deess", "DE-ESS");
     dynDeess.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+    tint(dynDeess, Neon::amber);
 
     setupKnob(dynFocus, "dyn_focus", "FOCUS");
     dynFocus.slider.textFromValueFunction = [](double v) {
         const int hz = (int) (2000.0 * std::pow(5.0, v));
         return hz >= 1000 ? juce::String(hz / 1000.0, 1) + "k" : juce::String(hz) + " Hz";
     };
+    tint(dynFocus, Neon::amber);
 
     startTimerHz(30);
 }
@@ -462,7 +525,7 @@ juce::Rectangle<float> VoxStudioEditor::eqArea() const
 {
     const int w = getWidth();
     const int h = getHeight();
-    return panelRect(1, w, h).toFloat().reduced(14.0f, 0.0f).withTrimmedTop(50.0f).withHeight(220.0f);
+    return panelRect(1, w, h).toFloat().reduced(12.0f, 0.0f).withTrimmedTop(50.0f).withHeight(200.0f);
 }
 
 juce::Point<float> VoxStudioEditor::nodePosition(int band) const
@@ -569,33 +632,32 @@ void VoxStudioEditor::paint(juce::Graphics& g)
 
     g.fillAll(Neon::bg);
 
-    g.setColour(Neon::grid.withAlpha(0.45f));
+    g.setColour(Neon::grid.withAlpha(0.4f));
     for (int x = 12; x < w; x += 24)
     {
         for (int y = 12; y < h; y += 24)
             g.fillRect(x, y, 1, 1);
     }
 
-    g.setGradientFill(juce::ColourGradient(Neon::violet.withAlpha(0.18f), 0.0f, 0.0f,
-                                           Neon::sky.withAlpha(0.03f), (float) w, 0.0f, false));
+    // Cabecera
+    g.setGradientFill(juce::ColourGradient(Neon::panel, 0.0f, 0.0f, Neon::bg, (float) w, 0.0f, false));
     g.fillRect(0.0f, 0.0f, (float) w, (float) headerH);
-    g.setGradientFill(juce::ColourGradient(Neon::violet, 0.0f, (float) headerH - 1.0f,
-                                           Neon::sky, (float) w, (float) headerH - 1.0f, false));
+    g.setColour(Neon::grid);
     g.fillRect(0.0f, (float) headerH - 1.0f, (float) w, 1.0f);
 
-    const juce::Colour accents[] = { Neon::sky, Neon::mint, Neon::violet, Neon::amber };
-    const juce::String names[]   = { "COMPRESSOR", "EQ  4 BAND", "SFX / REV / DELAY", "DYNAMICS" };
+    const juce::Colour accents[] = { Neon::sky, Neon::mint, Neon::pink, Neon::amber };
+    const juce::String names[]   = { "COMPRESIÓN Y DINÁMICA", "EQUALIZADOR 4 BANDAS", "REVERB · DELAY", "DYNAMICS" };
     const int icons[]            = { 1, 1, 2, 0 };
     for (int i = 0; i < 4; ++i)
         drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i], icons[i]);
 
     {
         auto p0 = panelRect(0, w, h).toFloat();
-        drawVuMeter(g, { p0.getX() + 14.0f, p0.getY() + 48.0f, p0.getWidth() - 28.0f, 60.0f }, grLevel);
+        drawVuMeter(g, { p0.getX() + 12.0f, p0.getY() + 48.0f, p0.getWidth() - 24.0f, 58.0f }, grLevel);
     }
 
     const auto area = eqArea();
-    g.setColour(Neon::bg.withAlpha(0.75f));
+    g.setColour(Neon::bg.withAlpha(0.8f));
     g.fillRoundedRectangle(area, 8.0f);
     g.setColour(Neon::grid);
     g.drawRoundedRectangle(area, 8.0f, 1.0f);
@@ -639,15 +701,16 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         else
             curve.lineTo(px, y);
     }
-    g.setGradientFill(juce::ColourGradient(Neon::violet, area.getX(), 0.0f,
-                                           Neon::sky, area.getRight(), 0.0f, false));
+    g.setGradientFill(juce::ColourGradient(Neon::sky, area.getX(), 0.0f,
+                                           Neon::violet, area.getRight(), 0.0f, false));
     g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
+    const juce::Colour nodeCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const auto p = nodePosition(b);
         const float gain = processor.apvts.getRawParameterValue("eq" + juce::String(b + 1) + "_gain")->load();
-        const juce::Colour c = (b % 2 == 0) ? Neon::mint : Neon::violet;
+        const juce::Colour c = nodeCol[b];
         const float alpha = std::abs(gain) < 0.05f ? 0.35f : 1.0f;
         g.setColour(c.withAlpha(0.25f * alpha));
         g.fillEllipse(p.x - 9.0f, p.y - 9.0f, 18.0f, 18.0f);
@@ -659,13 +722,16 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         const auto p3 = panelRect(3, w, h).toFloat();
         const juce::Colour ledCol = processor.getGateOpen() ? Neon::mint : Neon::grid;
         g.setColour(ledCol.withAlpha(0.3f));
-        g.fillEllipse(p3.getRight() - 34.0f, p3.getY() + 12.0f, 16.0f, 16.0f);
+        g.fillEllipse(p3.getRight() - 32.0f, p3.getY() + 12.0f, 16.0f, 16.0f);
         g.setColour(ledCol);
-        g.fillEllipse(p3.getRight() - 29.0f, p3.getY() + 17.0f, 6.0f, 6.0f);
+        g.fillEllipse(p3.getRight() - 27.0f, p3.getY() + 17.0f, 6.0f, 6.0f);
     }
 
-    drawMeter(g, footerInMeter(h),     inLevel);
-    drawMeter(g, footerOutMeter(w, h), outLevel);
+    // Medidores laterales: entrada a la izquierda, salida a la derecha
+    const int meterTop = panelTop;
+    const int meterH   = h - panelTop - footerH;
+    drawSideMeter(g, { pad / 2, meterTop, sideW - pad, meterH }, inLevel);
+    drawSideMeter(g, { w - sideW + pad / 2, meterTop, sideW - pad, meterH }, outLevel);
 }
 
 void VoxStudioEditor::resized()
@@ -673,68 +739,68 @@ void VoxStudioEditor::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    title.setBounds(24, 14, 320, 30);
-    subtitle.setBounds(24, 46, 600, 18);
+    title.setBounds(sideW + pad, 12, 300, 30);
+    subtitle.setBounds(sideW + pad, 44, 400, 16);
 
     const auto c3 = panelRect(3, w, h);
-    bypassButton.setBounds(c3.getX(), 20, c3.getWidth(), 26);
+    bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
     producer.setBounds(c3.getX(), 50, c3.getWidth(), 14);
 
-    // COMPRESSOR
+    // COMPRESIÓN: umbral grande arriba, cuatro perillas abajo
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(112);
-    placeKnob(compThreshold, p0.removeFromTop(110).reduced(20, 0), 96);
+    placeKnob(compThreshold, p0.removeFromTop(110).reduced(16, 0), 96);
     const auto compCells = cellsOf(p0, 2, 2);
-    placeKnob(compRatio,   compCells[0], 58);
-    placeKnob(compAttack,  compCells[1], 58);
-    placeKnob(compRelease, compCells[2], 58);
-    placeKnob(compMakeup,  compCells[3], 58);
+    placeKnob(compRatio,   compCells[0], 56);
+    placeKnob(compAttack,  compCells[1], 56);
+    placeKnob(compRelease, compCells[2], 56);
+    placeKnob(compMakeup,  compCells[3], 56);
 
-    // EQ
+    // EQ: FREQ y GAIN por banda
     auto p1 = innerRect(panelRect(1, w, h));
-    p1.removeFromTop(270);
+    p1.removeFromTop(256);
     const auto bandCols = cellsOf(p1, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const auto rows = cellsOf(bandCols[(size_t) b], 1, 2);
-        placeKnob(eqFreq[b], rows[0], 46);
-        placeKnob(eqGain[b], rows[1], 46);
+        placeKnob(eqFreq[b], rows[0], 44);
+        placeKnob(eqGain[b], rows[1], 44);
     }
 
-    // SFX / REVERB / DELAY
+    // REVERB · DELAY: drive, preset, reverb, luego delay
     auto p2 = innerRect(panelRect(2, w, h));
     placeKnob(sfxDrive, p2.removeFromTop(100), 88);
-    presetBox.setBounds(p2.removeFromTop(34).reduced(4, 6));
-    p2.removeFromTop(10);
-
-    const auto revCells = cellsOf(p2.removeFromTop(90), 3, 1);
-    placeKnob(revRoom, revCells[0].reduced(4, 0), 46);
-    placeKnob(revDamp, revCells[1].reduced(4, 0), 46);
-    placeKnob(revMix,  revCells[2].reduced(4, 0), 46);
+    presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
     p2.removeFromTop(8);
 
-    const auto dlyTop = cellsOf(p2.removeFromTop(80), 2, 1);
+    const auto revCells = cellsOf(p2.removeFromTop(86), 3, 1);
+    placeKnob(revRoom, revCells[0].reduced(2, 0), 44);
+    placeKnob(revDamp, revCells[1].reduced(2, 0), 44);
+    placeKnob(revMix,  revCells[2].reduced(2, 0), 44);
+    p2.removeFromTop(6);
+
+    const auto dlyTop = cellsOf(p2.removeFromTop(78), 2, 1);
     placeKnob(delayDiv, dlyTop[0], 50);
     placeKnob(delayFb,  dlyTop[1], 50);
 
     const auto dlyBot = cellsOf(p2, 3, 1);
-    placeKnob(delayDrv, dlyBot[0].reduced(4, 0), 46);
-    placeKnob(delayMix, dlyBot[1].reduced(4, 0), 46);
-    placeKnob(delayDry, dlyBot[2].reduced(4, 0), 46);
+    placeKnob(delayDrv, dlyBot[0].reduced(2, 0), 44);
+    placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
+    placeKnob(delayDry, dlyBot[2].reduced(2, 0), 44);
 
-    // DYNAMICS
+    // DYNAMICS: gate grande, de-esser y focus abajo
     auto p3 = innerRect(panelRect(3, w, h));
     placeKnob(dynGate, p3.removeFromTop(150).reduced(10, 0), 110);
     const auto dynCells = cellsOf(p3, 2, 1);
-    placeKnob(dynDeess, dynCells[0].reduced(2, 0), 76);
-    placeKnob(dynFocus, dynCells[1].reduced(2, 0), 76);
+    placeKnob(dynDeess, dynCells[0].reduced(2, 0), 74);
+    placeKnob(dynFocus, dynCells[1].reduced(2, 0), 74);
 
-    // Pie
-    inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
-    inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
+    // Pie: INPUT a la izquierda, OUTPUT a la derecha
+    inGain.slider.setBounds(pad + 4, h - footerH + 8, 52, 52);
+    inGain.label.setBounds(pad + 60, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
 
-    outGain.slider.setBounds(w - pad - 56, h - footerH + 6, 56, 56);
-    outGain.label.setBounds(w - pad - 134, h - footerH + 30, 70, 14);
+    outGain.slider.setBounds(w - pad - 56, h - footerH + 8, 52, 52);
+    outGain.label.setBounds(w - pad - 130, h - footerH + 30, 70, 14);
     outGain.label.setJustificationType(juce::Justification::right);
 }
