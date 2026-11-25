@@ -37,11 +37,13 @@ public:
     static const juce::StringArray reverbPresetNames;
     static const juce::StringArray delayDivisionNames;
     static constexpr int numEqBands = 4;
+    static constexpr int numSpecBands = 64;
 
     float getInputLevel() const { return inputLevel.load(); }
     float getOutputLevel() const { return outputLevel.load(); }
     float getGainReduction() const { return gainReductionDb.load(); }
     bool getGateOpen() const { return gateOpen.load(); }
+    float getSpectrumBand(int i) const { return specBands[(size_t) i].load(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
@@ -53,6 +55,7 @@ private:
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processDeEsser(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
+    void pushSpectrum(const juce::AudioBuffer<float>& buffer);
     double delayTimeMs() const;
 
     double currentSampleRate = 44100.0;
@@ -70,18 +73,22 @@ private:
     std::array<FilterBand, numEqBands> eqBands;
     FilterBand deEsserBand;
 
-    // Gate: detector, ganancia suavizada y estado con histéresis
     float gateEnv = 0.0f;
     float gateGainSm = 0.0f;
     bool gateOpenState = false;
 
-    // De-Esser: envolvente y buffer de trabajo para la banda de sibilancia
     float deEsserEnv = 0.0f;
     juce::AudioBuffer<float> sideBuffer;
 
-    // Delay: 4 segundos para cubrir incluso 1/1 a 60 BPM
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
+
+    // Analizador de espectro (FFT de 2048 muestras)
+    juce::dsp::FFT fft { 11 };
+    juce::dsp::WindowingFunction<float> fftWindow { 2048, juce::dsp::WindowingFunction<float>::hann };
+    std::array<float, 4096> fftBuffer {};
+    int fftFill = 0;
+    std::array<std::atomic<float>, numSpecBands> specBands;
 
     std::atomic<float> inputLevel { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
