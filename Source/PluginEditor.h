@@ -59,6 +59,7 @@ private:
     juce::ComboBox presetBox;
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
 
+    juce::ComboBox eqPresetBox;
     juce::ComboBox dynPresetBox;
     juce::ComboBox delayPresetBox;
 
