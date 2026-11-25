@@ -64,7 +64,8 @@ private:
     Knob eqFreq[VoxStudioProcessor::numEqBands];
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
-    Knob sfxDrive, delayMix, delayDiv;
+    Knob sfxDrive;
+    Knob delayMix, delayDry, delayFb, delayDrv, delayDiv;
     Knob revRoom, revDamp, revMix;
     Knob dynGate, dynDeess, dynFocus;
 
