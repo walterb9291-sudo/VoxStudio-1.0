@@ -80,6 +80,18 @@ namespace
     juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
     juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
 
+    // Icono de voz: barras verticales de distinta altura, alternando mint y sky
+    void drawVoiceIcon(juce::Graphics& g, float x, float cy)
+    {
+        const float heights[] = { 10.0f, 20.0f, 30.0f, 16.0f, 8.0f };
+        for (int i = 0; i < 5; ++i)
+        {
+            g.setColour(i % 2 == 0 ? Neon::mint : Neon::sky);
+            const float bh = heights[i];
+            g.fillRoundedRectangle(x + i * 6.0f, cy - bh * 0.5f, 3.0f, bh, 1.5f);
+        }
+    }
+
     void drawIcon(juce::Graphics& g, juce::Rectangle<float> r, int kind, juce::Colour c)
     {
         g.setColour(c);
@@ -146,7 +158,7 @@ namespace
         g.fillRect(r.getX() + 16.0f, r.getY() + 38.0f, r.getWidth() - 32.0f, 1.0f);
     }
 
-        void drawMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
+    void drawMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
     {
         g.setColour(Neon::grid);
         g.fillRoundedRectangle(r.toFloat(), 2.0f);
@@ -154,7 +166,8 @@ namespace
         g.setColour(Neon::mint);
         g.fillRoundedRectangle(r.toFloat().withWidth(fillW), 2.0f);
     }
-        void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
+
+    void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
     {
         g.setColour(Neon::panel);
         g.fillRoundedRectangle(r.toFloat(), 6.0f);
@@ -353,23 +366,11 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setResizable(false, false);
     setLookAndFeel(&lnf);
 
-    title.setText("VoxStudios", juce::dontSendNotification);
-    title.setFont(juce::FontOptions("Segoe UI", 22.0f, juce::Font::bold));
-    title.setColour(juce::Label::textColourId, Neon::text);
-    addAndMakeVisible(title);
+    // El título se dibuja en paint() para tener "VoxStudio" blanco y "TiemFX" en verde
+    title.setVisible(false);
+    subtitle.setVisible(false);
+    producer.setVisible(false);
 
-    subtitle.setText("Tiem  ·  MEZCLA · COLOR · CARÁCTER", juce::dontSendNotification);
-    subtitle.setFont(juce::FontOptions(10.0f));
-    subtitle.setColour(juce::Label::textColourId, Neon::muted);
-    addAndMakeVisible(subtitle);
-
-    producer.setText("1.0", juce::dontSendNotification);
-    producer.setFont(juce::FontOptions(9.0f, juce::Font::bold));
-    producer.setColour(juce::Label::textColourId, Neon::muted);
-    producer.setJustificationType(juce::Justification::centredRight);
-    addAndMakeVisible(producer);
-
-    // Buscador junto al BYPASS (visual por ahora)
     searchBox.setTextToShowWhenEmpty("Buscar preset...", Neon::muted);
     searchBox.setColour(juce::TextEditor::backgroundColourId, Neon::panel);
     searchBox.setColour(juce::TextEditor::textColourId, Neon::text);
@@ -384,7 +385,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
-    // Presets de DYNAMICS y DELAY (visuales por ahora)
     dynPresetBox.addItemList(kDynPresets, 1);
     dynPresetBox.setSelectedId(1, juce::dontSendNotification);
     dynPresetBox.setJustificationType(juce::Justification::centredLeft);
@@ -473,9 +473,15 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     revDamp.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+
+    // PRE-DELAY: visual por ahora, sin parámetro en el procesador todavía
+    setupPending(revPre, "PRE-DELAY");
+    revPre.slider.textFromValueFunction = [](double) { return juce::String("--"); };
+
     tint(revRoom, Neon::pink);
     tint(revDamp, Neon::pink);
     tint(revMix,  Neon::pink);
+    tint(revPre,  Neon::pink);
 
     setupKnob(delayMix, "sfx_delay", "WET");
     delayMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
@@ -523,7 +529,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     tint(dynFocus, Neon::amber);
 
-    // Pendientes de DYNAMICS (visuales)
     setupPending(dynDrive,   "DRIVE");
     setupPending(dynColor,   "COLOR");
     setupPending(dynHpFreq,  "HP FREQ");
@@ -715,10 +720,26 @@ void VoxStudioEditor::paint(juce::Graphics& g)
             g.fillRect(x, y, 1, 1);
     }
 
+    // Cabecera: icono de voz + "VoxStudio" en blanco y "TiemFX" en verde
     g.setGradientFill(juce::ColourGradient(Neon::panel, 0.0f, 0.0f, Neon::bg, (float) w, 0.0f, false));
     g.fillRect(0.0f, 0.0f, (float) w, (float) headerH);
     g.setColour(Neon::grid);
     g.fillRect(0.0f, (float) headerH - 1.0f, (float) w, 1.0f);
+
+    const float headerCy = 34.0f;
+    drawVoiceIcon(g, (float) sideW + pad, headerCy);
+
+    const float textX = (float) sideW + pad + 40.0f;
+    g.setFont(juce::FontOptions("Segoe UI", 22.0f, juce::Font::bold));
+    const float voxW = g.getCurrentFont().getStringWidthFloat("VoxStudio");
+
+    g.setColour(Neon::text);
+    g.drawText("VoxStudio", juce::Rectangle<float>(textX, headerCy - 18.0f, voxW + 4.0f, 36.0f),
+               juce::Justification::centredLeft, false);
+
+    g.setColour(Neon::mint);
+    g.drawText("TiemFX", juce::Rectangle<float>(textX + voxW + 8.0f, headerCy - 18.0f, 160.0f, 36.0f),
+               juce::Justification::centredLeft, false);
 
     const juce::Colour accents[] = { Neon::sky, Neon::mint, Neon::pink, Neon::amber };
     const juce::String names[]   = { "COMPRESIÓN Y DINÁMICA", "EQUALIZADOR 4 BANDAS", "REVERB · DELAY", "DYNAMICS" };
@@ -825,16 +846,12 @@ void VoxStudioEditor::resized()
     const int w = getWidth();
     const int h = getHeight();
 
-    title.setBounds(sideW + pad, 12, 300, 30);
-    subtitle.setBounds(sideW + pad, 44, 400, 16);
-
     const auto c2 = panelRect(2, w, h);
     const auto c3 = panelRect(3, w, h);
 
     // Buscador a la izquierda del BYPASS, BYPASS sobre DYNAMICS/DELAY
     searchBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
-    producer.setBounds(c3.getX(), 50, c3.getWidth(), 14);
 
     // COMPRESIÓN: umbral, cuatro perillas y caja GATE abajo
     auto p0 = innerRect(panelRect(0, w, h));
@@ -863,16 +880,17 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 56);
     }
 
-    // REVERB · DELAY: drive grande, presets, reverb, presets de delay, delay
+    // REVERB · DELAY: drive grande, presets, reverb con pre-delay, presets de delay, delay
     auto p2 = innerRect(panelRect(2, w, h));
     placeKnob(sfxDrive, p2.removeFromTop(96), 84);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
     p2.removeFromTop(6);
 
-    const auto revCells = cellsOf(p2.removeFromTop(84), 3, 1);
-    placeKnob(revRoom, revCells[0].reduced(2, 0), 52);
-    placeKnob(revDamp, revCells[1].reduced(2, 0), 52);
-    placeKnob(revMix,  revCells[2].reduced(2, 0), 52);
+    const auto revCells = cellsOf(p2.removeFromTop(84), 4, 1);
+    placeKnob(revRoom, revCells[0].reduced(2, 0), 46);
+    placeKnob(revDamp, revCells[1].reduced(2, 0), 46);
+    placeKnob(revMix,  revCells[2].reduced(2, 0), 46);
+    placeKnob(revPre,  revCells[3].reduced(2, 0), 46);
     p2.removeFromTop(6);
 
     delayPresetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
