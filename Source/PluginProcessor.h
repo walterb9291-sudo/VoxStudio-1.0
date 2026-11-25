@@ -70,10 +70,16 @@ private:
     std::array<FilterBand, numEqBands> eqBands;
     FilterBand deEsserBand;
 
-    std::array<float, 2> gateEnvelope { 0.0f, 0.0f };
+    // Gate: detector, ganancia suavizada y estado con histéresis
+    float gateEnv = 0.0f;
+    float gateGainSm = 0.0f;
+    bool gateOpenState = false;
+
+    // De-Esser: envolvente y buffer de trabajo para la banda de sibilancia
     float deEsserEnv = 0.0f;
     juce::AudioBuffer<float> sideBuffer;
 
+    // Delay: 4 segundos para cubrir incluso 1/1 a 60 BPM
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
 
