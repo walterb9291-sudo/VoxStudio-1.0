@@ -272,7 +272,6 @@ void NeonLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int widt
 
     drawAnalogKnob(g, cx, cy, radius, sliderPos, startAngle, endAngle);
 
-    // Valor sobre la tapa: siempre visible en las perillas "readout", y al pasar el mouse o girar en las demás
     const bool alwaysShow = slider.getComponentID() == "readout";
     if (alwaysShow || slider.isMouseOverOrDragging())
     {
@@ -321,7 +320,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(
         *processor.apvts.getParameter("bypass"), bypassButton, nullptr);
 
-    // INPUT y OUTPUT de 0 a 100 (solo visual; el valor real sigue en dB)
     setupKnob(inGain,  "in_gain",  "INPUT");
     setupKnob(outGain, "out_gain", "OUTPUT");
     inGain.slider.textFromValueFunction = [](double v) {
@@ -331,7 +329,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         return juce::String(juce::jlimit(0.0, 100.0, (v + 24.0) / 36.0 * 100.0), 0);
     };
 
-    // THRESHOLD en dB, como un compresor normal
     setupKnob(compThreshold, "comp_threshold", "THRESHOLD");
     compThreshold.slider.setComponentID("readout");
     compThreshold.slider.textFromValueFunction = [](double v) {
@@ -374,9 +371,15 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
-    // DELAY dentro de SFX / REVERB
-    setupKnob(delayMix, "sfx_delay", "D MIX");
+    // Delay: WET, DRY, FEEDBACK, DRIVE y división
+    setupKnob(delayMix, "sfx_delay", "WET");
     delayMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+    setupKnob(delayDry, "sfx_delay_dry", "DRY");
+    delayDry.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+    setupKnob(delayFb, "sfx_delay_fb", "FEEDBACK");
+    delayFb.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+    setupKnob(delayDrv, "sfx_delay_drv", "DRIVE");
+    delayDrv.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
     delayDiv.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     delayDiv.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -398,7 +401,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayDiv.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(delayDiv.label);
 
-    // DYNAMICS: gate, de-esser y frecuencia del de-esser
     setupKnob(dynGate, "dyn_gate", "GATE");
     dynGate.slider.setComponentID("readout");
     dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
@@ -455,8 +457,6 @@ void VoxStudioEditor::timerCallback()
 
     repaint();
 }
-
-// ----- EQ interactivo -----
 
 juce::Rectangle<float> VoxStudioEditor::eqArea() const
 {
@@ -562,8 +562,6 @@ void VoxStudioEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::Mous
     }
 }
 
-// ----- Pintado -----
-
 void VoxStudioEditor::paint(juce::Graphics& g)
 {
     const int w = getWidth();
@@ -657,7 +655,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    // LED de gate: verde cuando la voz pasa
     {
         const auto p3 = panelRect(3, w, h).toFloat();
         const juce::Colour ledCol = processor.getGateOpen() ? Neon::mint : Neon::grid;
@@ -683,7 +680,7 @@ void VoxStudioEditor::resized()
     bypassButton.setBounds(c3.getX(), 20, c3.getWidth(), 26);
     producer.setBounds(c3.getX(), 50, c3.getWidth(), 14);
 
-    // COMPRESSOR: THRESHOLD grande en dB arriba, cuatro perillas abajo
+    // COMPRESSOR
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(112);
     placeKnob(compThreshold, p0.removeFromTop(110).reduced(20, 0), 96);
@@ -693,7 +690,7 @@ void VoxStudioEditor::resized()
     placeKnob(compRelease, compCells[2], 58);
     placeKnob(compMakeup,  compCells[3], 58);
 
-    // EQ: perillas FREQ y GAIN por banda
+    // EQ
     auto p1 = innerRect(panelRect(1, w, h));
     p1.removeFromTop(270);
     const auto bandCols = cellsOf(p1, 4, 1);
@@ -704,33 +701,35 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 46);
     }
 
-    // SFX / REVERB / DELAY: DRIVE, selector de preset, reverb, y delay abajo
+    // SFX / REVERB / DELAY
     auto p2 = innerRect(panelRect(2, w, h));
-
-    placeKnob(sfxDrive, p2.removeFromTop(110), 96);
-
+    placeKnob(sfxDrive, p2.removeFromTop(100), 88);
     presetBox.setBounds(p2.removeFromTop(34).reduced(4, 6));
     p2.removeFromTop(10);
 
-    const auto revCells = cellsOf(p2.removeFromTop(100), 3, 1);
+    const auto revCells = cellsOf(p2.removeFromTop(90), 3, 1);
     placeKnob(revRoom, revCells[0].reduced(4, 0), 46);
     placeKnob(revDamp, revCells[1].reduced(4, 0), 46);
     placeKnob(revMix,  revCells[2].reduced(4, 0), 46);
+    p2.removeFromTop(8);
 
-    p2.removeFromTop(10);
+    const auto dlyTop = cellsOf(p2.removeFromTop(80), 2, 1);
+    placeKnob(delayDiv, dlyTop[0], 50);
+    placeKnob(delayFb,  dlyTop[1], 50);
 
-    const auto dlyCells = cellsOf(p2, 2, 1);
-    placeKnob(delayMix, dlyCells[0], 84);
-    placeKnob(delayDiv, dlyCells[1], 84);
+    const auto dlyBot = cellsOf(p2, 3, 1);
+    placeKnob(delayDrv, dlyBot[0].reduced(4, 0), 46);
+    placeKnob(delayMix, dlyBot[1].reduced(4, 0), 46);
+    placeKnob(delayDry, dlyBot[2].reduced(4, 0), 46);
 
-    // DYNAMICS: GATE grande arriba, DE-ESS y FOCUS abajo
+    // DYNAMICS
     auto p3 = innerRect(panelRect(3, w, h));
     placeKnob(dynGate, p3.removeFromTop(150).reduced(10, 0), 110);
     const auto dynCells = cellsOf(p3, 2, 1);
     placeKnob(dynDeess, dynCells[0].reduced(2, 0), 76);
     placeKnob(dynFocus, dynCells[1].reduced(2, 0), 76);
 
-    // Pie: INPUT a la izquierda, OUTPUT a la derecha
+    // Pie
     inGain.slider.setBounds(pad, h - footerH + 6, 56, 56);
     inGain.label.setBounds(pad + 64, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
