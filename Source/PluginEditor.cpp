@@ -146,7 +146,15 @@ namespace
         g.fillRect(r.getX() + 16.0f, r.getY() + 38.0f, r.getWidth() - 32.0f, 1.0f);
     }
 
-    void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
+        void drawMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
+    {
+        g.setColour(Neon::grid);
+        g.fillRoundedRectangle(r.toFloat(), 2.0f);
+        const float fillW = (float) r.getWidth() * juce::jlimit(0.0f, 1.0f, level);
+        g.setColour(Neon::mint);
+        g.fillRoundedRectangle(r.toFloat().withWidth(fillW), 2.0f);
+    }
+        void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
     {
         g.setColour(Neon::panel);
         g.fillRoundedRectangle(r.toFloat(), 6.0f);
