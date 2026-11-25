@@ -40,6 +40,7 @@ public:
 private:
     void timerCallback() override;
     void setupKnob(Knob& k, const juce::String& paramID, const juce::String& text);
+    void setupPending(Knob& k, const juce::String& text);
     void setDelayDivision(int index);
     juce::Rectangle<float> eqArea() const;
     juce::Point<float> nodePosition(int band) const;
@@ -53,14 +54,20 @@ private:
     juce::Label subtitle;
     juce::Label producer;
 
+    juce::TextEditor searchBox;
+
     juce::ComboBox presetBox;
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
+
+    juce::ComboBox dynPresetBox;
+    juce::ComboBox delayPresetBox;
 
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
     Knob inGain, outGain;
     Knob compThreshold, compRatio, compAttack, compRelease, compMakeup;
+    Knob gateHyst;
     Knob eqFreq[VoxStudioProcessor::numEqBands];
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
@@ -68,6 +75,7 @@ private:
     Knob delayMix, delayDry, delayFb, delayDrv, delayDiv;
     Knob revRoom, revDamp, revMix;
     Knob dynGate, dynDeess, dynFocus;
+    Knob dynDrive, dynColor, dynHpFreq, dynLpFreq, dynMix;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
