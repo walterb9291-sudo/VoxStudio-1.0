@@ -26,8 +26,12 @@ namespace
     constexpr int headerH  = 74;
     constexpr int panelTop = 88;
     constexpr int footerH  = 72;
+    constexpr int gateBoxH = 118;
 
     const char* const kDivLabels[8] = { "1/1", "1/2", "1/4", "1/8", "1/16", "1/4.", "1/8.", "1/4T" };
+
+    const juce::StringArray kDynPresets   { "Warm Tape", "Clean", "Crunch", "Lo-Fi", "Vintage", "Modern" };
+    const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
 
     juce::Rectangle<int> panelRect(int i, int w, int h)
     {
@@ -38,6 +42,12 @@ namespace
     juce::Rectangle<int> innerRect(juce::Rectangle<int> p)
     {
         return p.reduced(12, 0).withTrimmedTop(46).withTrimmedBottom(12);
+    }
+
+    juce::Rectangle<int> gateBoxRect(int w, int h)
+    {
+        auto p = innerRect(panelRect(0, w, h));
+        return p.withTop(p.getBottom() - gateBoxH);
     }
 
     std::vector<juce::Rectangle<int>> cellsOf(juce::Rectangle<int> a, int cols, int rows)
@@ -66,6 +76,9 @@ namespace
         const int s = juce::jmin(size, juce::jmin(cell.getWidth(), cell.getHeight()));
         k.slider.setBounds(cell.getCentreX() - s / 2, cell.getCentreY() - s / 2, s, s);
     }
+
+    juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
+    juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
 
     void drawIcon(juce::Graphics& g, juce::Rectangle<float> r, int kind, juce::Colour c)
     {
@@ -133,7 +146,6 @@ namespace
         g.fillRect(r.getX() + 16.0f, r.getY() + 38.0f, r.getWidth() - 32.0f, 1.0f);
     }
 
-    // Medidor lateral segmentado: verde, amarillo y ámbar arriba
     void drawSideMeter(juce::Graphics& g, juce::Rectangle<int> r, float level)
     {
         g.setColour(Neon::panel);
@@ -150,8 +162,10 @@ namespace
         {
             const float y = (float) r.getBottom() - 7.0f - (s + 1) * segH + 1.0f;
             juce::Colour c = Neon::mint;
-            if (s >= 11) c = Neon::amber;
-            else if (s >= 8) c = Neon::yellow;
+            if (s >= 11)
+                c = Neon::amber;
+            else if (s >= 8)
+                c = Neon::yellow;
 
             g.setColour(s < lit ? c : Neon::grid);
             g.fillRoundedRectangle((float) r.getX() + 8.0f, y, (float) r.getWidth() - 16.0f, segH - 2.0f, 1.5f);
@@ -204,7 +218,6 @@ namespace
                    juce::Justification::right, false);
     }
 
-    // Perilla de plugin: aro de escala, pista, arco de valor y tapa oscura con puntero
     void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
                         float sliderPos, float startAngle, float endAngle, juce::Colour accent)
     {
@@ -264,7 +277,7 @@ NeonLookAndFeel::NeonLookAndFeel()
 {
     setColour(juce::ComboBox::backgroundColourId, Neon::panel);
     setColour(juce::ComboBox::outlineColourId, Neon::grid);
-    setColour(juce::ComboBox::textColourId, Neon::mint);
+    setColour(juce::ComboBox::textColourId, Neon::text);
     setColour(juce::ComboBox::arrowColourId, Neon::sky);
     setColour(juce::PopupMenu::backgroundColourId, Neon::panel);
     setColour(juce::PopupMenu::textColourId, Neon::text);
@@ -348,11 +361,31 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     producer.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(producer);
 
+    // Buscador junto al BYPASS (visual por ahora)
+    searchBox.setTextToShowWhenEmpty("Buscar preset...", Neon::muted);
+    searchBox.setColour(juce::TextEditor::backgroundColourId, Neon::panel);
+    searchBox.setColour(juce::TextEditor::textColourId, Neon::text);
+    searchBox.setColour(juce::TextEditor::outlineColourId, Neon::sky.withAlpha(0.6f));
+    searchBox.setColour(juce::TextEditor::focusedOutlineColourId, Neon::sky);
+    searchBox.setFont(juce::Font(juce::FontOptions("Segoe UI", 12.0f, juce::Font::plain)));
+    addAndMakeVisible(searchBox);
+
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
     presetBox.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(presetBox);
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
+
+    // Presets de DYNAMICS y DELAY (visuales por ahora)
+    dynPresetBox.addItemList(kDynPresets, 1);
+    dynPresetBox.setSelectedId(1, juce::dontSendNotification);
+    dynPresetBox.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(dynPresetBox);
+
+    delayPresetBox.addItemList(kDelayPresets, 1);
+    delayPresetBox.setSelectedId(1, juce::dontSendNotification);
+    delayPresetBox.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(delayPresetBox);
 
     bypassButton.setClickingTogglesState(true);
     addAndMakeVisible(bypassButton);
@@ -370,7 +403,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         return juce::String(juce::jlimit(0.0, 100.0, (v + 24.0) / 36.0 * 100.0), 0);
     };
 
-    // COMPRESIÓN Y DINÁMICA (celeste)
+    // COMPRESIÓN (celeste)
     setupKnob(compThreshold, "comp_threshold", "THRESHOLD");
     compThreshold.slider.setComponentID("readout");
     compThreshold.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
@@ -389,7 +422,17 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     tint(compRelease,   Neon::sky);
     tint(compMakeup,    Neon::sky);
 
-    // EQ 4 BANDAS (azul, verde, ámbar, morado, como tu boceto)
+    // GATE dentro del compresor: UMBRAL (activo) e HISTÉRESIS (visual)
+    setupKnob(dynGate, "dyn_gate", "UMBRAL");
+    dynGate.slider.setComponentID("readout");
+    dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
+    tint(dynGate, Neon::sky);
+
+    setupPending(gateHyst, "HISTÉRESIS");
+    gateHyst.slider.textFromValueFunction = [](double) { return juce::String("6 dB"); };
+    tint(gateHyst, Neon::sky);
+
+    // EQ 4 BANDAS (azul, verde, ámbar, morado)
     const juce::Colour bandCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
@@ -410,7 +453,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         tint(eqGain[b], bandCol[b]);
     }
 
-    // SFX / REVERB / DELAY (magenta)
+    // REVERB · DELAY (magenta)
     setupKnob(sfxDrive, "sfx_drive", "DRIVE");
     sfxDrive.slider.setComponentID("drive");
     sfxDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
@@ -453,19 +496,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         setDelayDivision((int) std::round(delayDiv.slider.getValue()));
     };
     addAndMakeVisible(delayDiv.slider);
-    delayDiv.slider.setColour(juce::Slider::rotarySliderFillColourId, Neon::pink);
+    tint(delayDiv, Neon::pink);
     delayDiv.label.setText("D TIME", juce::dontSendNotification);
     delayDiv.label.setFont(juce::FontOptions(8.5f, juce::Font::bold));
     delayDiv.label.setColour(juce::Label::textColourId, Neon::muted);
     delayDiv.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(delayDiv.label);
 
-    // DYNAMICS (naranja, gate celeste)
-    setupKnob(dynGate, "dyn_gate", "GATE");
-    dynGate.slider.setComponentID("readout");
-    dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
-    tint(dynGate, Neon::sky);
-
+    // DYNAMICS (naranja)
     setupKnob(dynDeess, "dyn_deess", "DE-ESS");
     dynDeess.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     tint(dynDeess, Neon::amber);
@@ -476,6 +514,18 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         return hz >= 1000 ? juce::String(hz / 1000.0, 1) + "k" : juce::String(hz) + " Hz";
     };
     tint(dynFocus, Neon::amber);
+
+    // Pendientes de DYNAMICS (visuales)
+    setupPending(dynDrive,   "DRIVE");
+    setupPending(dynColor,   "COLOR");
+    setupPending(dynHpFreq,  "HP FREQ");
+    setupPending(dynLpFreq,  "LP FREQ");
+    setupPending(dynMix,     "MIX");
+    tint(dynDrive,  Neon::amber);
+    tint(dynColor,  Neon::amber);
+    tint(dynHpFreq, Neon::violet);
+    tint(dynLpFreq, Neon::amber);
+    tint(dynMix,    Neon::amber);
 
     startTimerHz(30);
 }
@@ -506,6 +556,24 @@ void VoxStudioEditor::setupKnob(Knob& k, const juce::String& paramID, const juce
 
     k.attachment = std::make_unique<juce::SliderParameterAttachment>(
         *processor.apvts.getParameter(paramID), k.slider, nullptr);
+}
+
+void VoxStudioEditor::setupPending(Knob& k, const juce::String& text)
+{
+    k.slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    k.slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    k.slider.setRange(0.0, 1.0, 0.001);
+    k.slider.setValue(0.5, juce::dontSendNotification);
+    k.slider.setEnabled(false);
+    k.slider.setComponentID("readout");
+    k.slider.textFromValueFunction = [](double) { return juce::String("--"); };
+    addAndMakeVisible(k.slider);
+
+    k.label.setText(text, juce::dontSendNotification);
+    k.label.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+    k.label.setColour(juce::Label::textColourId, Neon::muted);
+    k.label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(k.label);
 }
 
 void VoxStudioEditor::timerCallback()
@@ -639,7 +707,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
             g.fillRect(x, y, 1, 1);
     }
 
-    // Cabecera
     g.setGradientFill(juce::ColourGradient(Neon::panel, 0.0f, 0.0f, Neon::bg, (float) w, 0.0f, false));
     g.fillRect(0.0f, 0.0f, (float) w, (float) headerH);
     g.setColour(Neon::grid);
@@ -653,7 +720,25 @@ void VoxStudioEditor::paint(juce::Graphics& g)
 
     {
         auto p0 = panelRect(0, w, h).toFloat();
-        drawVuMeter(g, { p0.getX() + 12.0f, p0.getY() + 48.0f, p0.getWidth() - 24.0f, 58.0f }, grLevel);
+        drawVuMeter(g, { p0.getX() + 12.0f, p0.getY() + 48.0f, p0.getWidth() - 24.0f, 60.0f }, grLevel);
+    }
+
+    // Caja GATE dentro del compresor
+    {
+        const auto gr = gateBoxRect(w, h);
+        g.setColour(Neon::sky.withAlpha(0.6f));
+        g.drawRoundedRectangle(gr.toFloat().reduced(0.5f), 8.0f, 1.0f);
+
+        g.setColour(Neon::sky);
+        g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        g.drawText("GATE", juce::Rectangle<int>(gr.getX() + 10, gr.getY() + 6, 80, 16),
+                   juce::Justification::left, false);
+
+        const juce::Colour ledCol = processor.getGateOpen() ? Neon::mint : Neon::grid;
+        g.setColour(ledCol.withAlpha(0.3f));
+        g.fillEllipse((float) gr.getRight() - 24.0f, (float) gr.getY() + 6.0f, 14.0f, 14.0f);
+        g.setColour(ledCol);
+        g.fillEllipse((float) gr.getRight() - 20.0f, (float) gr.getY() + 10.0f, 6.0f, 6.0f);
     }
 
     const auto area = eqArea();
@@ -718,20 +803,13 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    {
-        const auto p3 = panelRect(3, w, h).toFloat();
-        const juce::Colour ledCol = processor.getGateOpen() ? Neon::mint : Neon::grid;
-        g.setColour(ledCol.withAlpha(0.3f));
-        g.fillEllipse(p3.getRight() - 32.0f, p3.getY() + 12.0f, 16.0f, 16.0f);
-        g.setColour(ledCol);
-        g.fillEllipse(p3.getRight() - 27.0f, p3.getY() + 17.0f, 6.0f, 6.0f);
-    }
-
-    // Medidores laterales: entrada a la izquierda, salida a la derecha
     const int meterTop = panelTop;
     const int meterH   = h - panelTop - footerH;
     drawSideMeter(g, { pad / 2, meterTop, sideW - pad, meterH }, inLevel);
     drawSideMeter(g, { w - sideW + pad / 2, meterTop, sideW - pad, meterH }, outLevel);
+
+    drawMeter(g, footerInMeter(h), inLevel);
+    drawMeter(g, footerOutMeter(w, h), outLevel);
 }
 
 void VoxStudioEditor::resized()
@@ -742,58 +820,86 @@ void VoxStudioEditor::resized()
     title.setBounds(sideW + pad, 12, 300, 30);
     subtitle.setBounds(sideW + pad, 44, 400, 16);
 
+    const auto c2 = panelRect(2, w, h);
     const auto c3 = panelRect(3, w, h);
+
+    // Buscador a la izquierda del BYPASS, BYPASS sobre DYNAMICS/DELAY
+    searchBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
     producer.setBounds(c3.getX(), 50, c3.getWidth(), 14);
 
-    // COMPRESIÓN: umbral grande arriba, cuatro perillas abajo
+    // COMPRESIÓN: umbral, cuatro perillas y caja GATE abajo
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(112);
-    placeKnob(compThreshold, p0.removeFromTop(110).reduced(16, 0), 96);
+    placeKnob(compThreshold, p0.removeFromTop(96).reduced(20, 0), 88);
+    p0.removeFromBottom(gateBoxH);
     const auto compCells = cellsOf(p0, 2, 2);
     placeKnob(compRatio,   compCells[0], 56);
     placeKnob(compAttack,  compCells[1], 56);
     placeKnob(compRelease, compCells[2], 56);
     placeKnob(compMakeup,  compCells[3], 56);
 
-    // EQ: FREQ y GAIN por banda
+    auto gr = gateBoxRect(w, h).reduced(10, 6).withTrimmedTop(18);
+    const auto gateCells = cellsOf(gr, 2, 1);
+    placeKnob(dynGate,  gateCells[0], 56);
+    placeKnob(gateHyst, gateCells[1], 56);
+
+    // EQ: FREQ y GAIN por banda, perillas grandes
     auto p1 = innerRect(panelRect(1, w, h));
     p1.removeFromTop(256);
     const auto bandCols = cellsOf(p1, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const auto rows = cellsOf(bandCols[(size_t) b], 1, 2);
-        placeKnob(eqFreq[b], rows[0], 44);
-        placeKnob(eqGain[b], rows[1], 44);
+        placeKnob(eqFreq[b], rows[0], 56);
+        placeKnob(eqGain[b], rows[1], 56);
     }
 
-    // REVERB · DELAY: drive, preset, reverb, luego delay
+    // REVERB · DELAY: drive grande, presets, reverb, presets de delay, delay
     auto p2 = innerRect(panelRect(2, w, h));
-    placeKnob(sfxDrive, p2.removeFromTop(100), 88);
+    placeKnob(sfxDrive, p2.removeFromTop(96), 84);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
-    p2.removeFromTop(8);
-
-    const auto revCells = cellsOf(p2.removeFromTop(86), 3, 1);
-    placeKnob(revRoom, revCells[0].reduced(2, 0), 44);
-    placeKnob(revDamp, revCells[1].reduced(2, 0), 44);
-    placeKnob(revMix,  revCells[2].reduced(2, 0), 44);
     p2.removeFromTop(6);
 
-    const auto dlyTop = cellsOf(p2.removeFromTop(78), 2, 1);
-    placeKnob(delayDiv, dlyTop[0], 50);
-    placeKnob(delayFb,  dlyTop[1], 50);
+    const auto revCells = cellsOf(p2.removeFromTop(84), 3, 1);
+    placeKnob(revRoom, revCells[0].reduced(2, 0), 52);
+    placeKnob(revDamp, revCells[1].reduced(2, 0), 52);
+    placeKnob(revMix,  revCells[2].reduced(2, 0), 52);
+    p2.removeFromTop(6);
+
+    delayPresetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
+    p2.removeFromTop(6);
+
+    const auto dlyTop = cellsOf(p2.removeFromTop(84), 2, 1);
+    placeKnob(delayDiv, dlyTop[0], 60);
+    placeKnob(delayFb,  dlyTop[1], 60);
 
     const auto dlyBot = cellsOf(p2, 3, 1);
-    placeKnob(delayDrv, dlyBot[0].reduced(2, 0), 44);
-    placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
-    placeKnob(delayDry, dlyBot[2].reduced(2, 0), 44);
+    placeKnob(delayDrv, dlyBot[0].reduced(2, 0), 60);
+    placeKnob(delayMix, dlyBot[1].reduced(2, 0), 60);
+    placeKnob(delayDry, dlyBot[2].reduced(2, 0), 60);
 
-    // DYNAMICS: gate grande, de-esser y focus abajo
+    // DYNAMICS: presets, DE-ESS y FOCUS grandes, pendientes abajo
     auto p3 = innerRect(panelRect(3, w, h));
-    placeKnob(dynGate, p3.removeFromTop(150).reduced(10, 0), 110);
-    const auto dynCells = cellsOf(p3, 2, 1);
-    placeKnob(dynDeess, dynCells[0].reduced(2, 0), 74);
-    placeKnob(dynFocus, dynCells[1].reduced(2, 0), 74);
+    dynPresetBox.setBounds(p3.removeFromTop(30).reduced(4, 4));
+    p3.removeFromTop(8);
+
+    const auto row1 = cellsOf(p3.removeFromTop(112), 2, 1);
+    placeKnob(dynDeess, row1[0], 80);
+    placeKnob(dynFocus, row1[1], 80);
+    p3.removeFromTop(8);
+
+    const auto row2 = cellsOf(p3.removeFromTop(112), 2, 1);
+    placeKnob(dynDrive, row2[0], 72);
+    placeKnob(dynColor, row2[1], 72);
+    p3.removeFromTop(8);
+
+    const auto row3 = cellsOf(p3.removeFromTop(112), 2, 1);
+    placeKnob(dynHpFreq, row3[0], 64);
+    placeKnob(dynLpFreq, row3[1], 64);
+    p3.removeFromTop(8);
+
+    placeKnob(dynMix, p3, 56);
 
     // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad + 4, h - footerH + 8, 52, 52);
