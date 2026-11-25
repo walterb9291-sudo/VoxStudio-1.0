@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
 
 const juce::StringArray VoxStudioProcessor::reverbPresetNames {
     "Room", "Hall", "Plate", "Vocal Space", "Shimmer Air"
@@ -15,6 +16,8 @@ VoxStudioProcessor::VoxStudioProcessor()
                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "PARAMS", createLayout())
 {
+    for (auto& s : specBands)
+        s.store(0.0f);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLayout()
@@ -113,6 +116,8 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gateEnv = 0.0f;
     gateGainSm = 0.0f;
     gateOpenState = false;
+
+    fftFill = 0;
 
     applyReverbPreset(static_cast<int>(apvts.getRawParameterValue("rev_preset")->load()));
     updateEq();
@@ -341,6 +346,47 @@ void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
     delayWritePos = (delayWritePos + numSamples) % bufLen;
 }
 
+void VoxStudioProcessor::pushSpectrum(const juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    if (n == 0 || buffer.getNumChannels() < 1)
+        return;
+
+    const float* L = buffer.getReadPointer(0);
+    const float* R = buffer.getNumChannels() > 1 ? buffer.getReadPointer(1) : L;
+
+    for (int i = 0; i < n; ++i)
+    {
+        fftBuffer[(size_t) fftFill++] = 0.5f * (L[i] + R[i]);
+
+        if (fftFill < 2048)
+            continue;
+
+        std::fill(fftBuffer.begin() + 2048, fftBuffer.end(), 0.0f);
+        fftWindow.multiplyWithWindowingTable(fftBuffer.data(), 2048);
+        fft.performFrequencyOnlyForwardTransform(fftBuffer.data());
+
+        for (int b = 0; b < numSpecBands; ++b)
+        {
+            const float t0 = (float) b / (float) numSpecBands;
+            const float t1 = (float) (b + 1) / (float) numSpecBands;
+            const int k0 = juce::jlimit(1, 1022, (int) std::pow(1023.0f, t0));
+            const int k1 = juce::jlimit(k0 + 1, 1023, (int) std::pow(1023.0f, t1));
+
+            float peak = 0.0f;
+            for (int k = k0; k < k1; ++k)
+                peak = juce::jmax(peak, fftBuffer[(size_t) k]);
+
+            const float db   = juce::Decibels::gainToDecibels(peak / 1024.0f, -90.0f);
+            const float v    = juce::jmap(juce::jlimit(-90.0f, 0.0f, db), -90.0f, 0.0f, 0.0f, 1.0f);
+            const float prev = specBands[(size_t) b].load();
+            specBands[(size_t) b].store(v > prev ? v : prev * 0.8f + v * 0.2f);
+        }
+
+        fftFill = 0;
+    }
+}
+
 void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -397,6 +443,7 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     outputGain.setGainDecibels(apvts.getRawParameterValue("out_gain")->load());
     outputGain.process(ctx);
 
+    pushSpectrum(buffer);
     outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
 }
 
