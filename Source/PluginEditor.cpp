@@ -35,7 +35,6 @@ namespace
     const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
     const juce::StringArray kEqPresets    { "Warm", "Airy", "Tape", "Flat" };
 
-    // ---------- Presets por columna ----------
     struct PV { const char* id; float value; };
 
     void applyValues(juce::AudioProcessorValueTreeState& s, std::initializer_list<PV> list)
@@ -45,30 +44,29 @@ namespace
                 p->setValueNotifyingHost(p->convertTo0to1(pv.value));
     }
 
-    // EQ: frecuencias y ganancias de las cuatro bandas
     void applyEqPreset(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
         {
-            case 0: // Warm: más cuerpo en medios-graves y menos agudos
+            case 0:
                 applyValues(s, { { "eq1_freq", 150.0f }, { "eq1_gain", 1.5f },
                                  { "eq2_freq", 400.0f }, { "eq2_gain", 0.5f },
                                  { "eq3_freq", 2500.0f }, { "eq3_gain", -1.0f },
                                  { "eq4_freq", 9000.0f }, { "eq4_gain", -2.5f } });
                 break;
-            case 1: // Airy: corta el lodo y abre el aire
+            case 1:
                 applyValues(s, { { "eq1_freq", 120.0f }, { "eq1_gain", -1.5f },
                                  { "eq2_freq", 350.0f }, { "eq2_gain", -1.0f },
                                  { "eq3_freq", 3000.0f }, { "eq3_gain", 1.0f },
                                  { "eq4_freq", 12000.0f }, { "eq4_gain", 3.0f } });
                 break;
-            case 2: // Tape: graves suaves y agudos redondeados
+            case 2:
                 applyValues(s, { { "eq1_freq", 100.0f }, { "eq1_gain", 1.0f },
                                  { "eq2_freq", 1000.0f }, { "eq2_gain", -0.5f },
                                  { "eq3_freq", 3500.0f }, { "eq3_gain", -1.5f },
                                  { "eq4_freq", 10000.0f }, { "eq4_gain", -3.0f } });
                 break;
-            default: // Flat: sin corrección
+            default:
                 applyValues(s, { { "eq1_freq", 120.0f }, { "eq1_gain", 0.0f },
                                  { "eq2_freq", 500.0f }, { "eq2_gain", 0.0f },
                                  { "eq3_freq", 2500.0f }, { "eq3_gain", 0.0f },
@@ -77,25 +75,29 @@ namespace
         }
     }
 
-    // Reverb: tipo, tamaño, decay, amortiguación, mezcla y pre-delay
+    // Reverb: tipo, tamaño, decay, amortiguación, mezcla, pre-delay, rate y depth de la modulación
     void applyReverbPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
         {
             case 0: applyValues(s, { { "rev_preset", 0.0f }, { "rev_room", 0.3f }, { "rev_decay", 0.8f },
-                                     { "rev_damp", 0.6f }, { "rev_mix", 0.2f }, { "rev_pre", 5.0f } }); break;
+                                     { "rev_damp", 0.6f }, { "rev_mix", 0.2f }, { "rev_pre", 5.0f },
+                                     { "mod_rate", 0.6f }, { "mod_depth", 0.20f } }); break;
             case 1: applyValues(s, { { "rev_preset", 1.0f }, { "rev_room", 0.7f }, { "rev_decay", 2.8f },
-                                     { "rev_damp", 0.4f }, { "rev_mix", 0.25f }, { "rev_pre", 20.0f } }); break;
+                                     { "rev_damp", 0.4f }, { "rev_mix", 0.25f }, { "rev_pre", 20.0f },
+                                     { "mod_rate", 0.4f }, { "mod_depth", 0.15f } }); break;
             case 2: applyValues(s, { { "rev_preset", 2.0f }, { "rev_room", 0.5f }, { "rev_decay", 1.8f },
-                                     { "rev_damp", 0.2f }, { "rev_mix", 0.25f }, { "rev_pre", 10.0f } }); break;
+                                     { "rev_damp", 0.2f }, { "rev_mix", 0.25f }, { "rev_pre", 10.0f },
+                                     { "mod_rate", 0.9f }, { "mod_depth", 0.35f } }); break;
             case 3: applyValues(s, { { "rev_preset", 3.0f }, { "rev_room", 0.45f }, { "rev_decay", 1.6f },
-                                     { "rev_damp", 0.7f }, { "rev_mix", 0.2f }, { "rev_pre", 30.0f } }); break;
+                                     { "rev_damp", 0.7f }, { "rev_mix", 0.2f }, { "rev_pre", 30.0f },
+                                     { "mod_rate", 0.5f }, { "mod_depth", 0.25f } }); break;
             default: applyValues(s, { { "rev_preset", 4.0f }, { "rev_room", 0.9f }, { "rev_decay", 4.0f },
-                                      { "rev_damp", 0.1f }, { "rev_mix", 0.3f }, { "rev_pre", 40.0f } }); break;
+                                      { "rev_damp", 0.1f }, { "rev_mix", 0.3f }, { "rev_pre", 40.0f },
+                                      { "mod_rate", 1.5f }, { "mod_depth", 0.50f } }); break;
         }
     }
 
-    // Delay: división, feedback, mezcla, dry y drive de los ecos
     void applyDelayPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
@@ -113,7 +115,6 @@ namespace
         }
     }
 
-    // DYNAMICS: drive, color, filtros, de-esser y mezcla
     void applyDynPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
@@ -137,6 +138,74 @@ namespace
                                       { "dyn_lp", 20000.0f }, { "dyn_deess", 0.35f }, { "dyn_focus", 0.60f },
                                       { "dyn_mix", 1.0f } }); break;
         }
+    }
+
+    // ---------- Presets globales: una sola selección ajusta las cuatro columnas ----------
+    // eq, rev, dly, dyn: índice del preset de cada columna (-1 = no cambiar la reverb o el delay)
+    struct GlobalPreset
+    {
+        const char* name;
+        int eq, rev, dly, dyn;
+        float thr, ratio, att, rel, mk, gate;
+    };
+
+    const GlobalPreset kGlobalPresets[] = {
+        { "Vocal Clean",  3, 3, 0,  1, -20.0f, 3.0f, 10.0f, 120.0f, 3.0f, -50.0f },
+        { "Vocal Bright", 1, 2, 0,  1, -18.0f, 3.5f,  8.0f, 100.0f, 4.0f, -50.0f },
+        { "Podcast",      0, 0, 0,  1, -22.0f, 4.0f, 12.0f, 150.0f, 5.0f, -45.0f },
+        { "Radio",        2, 0, -1, 3, -15.0f, 6.0f,  5.0f,  80.0f, 6.0f, -40.0f },
+        { "Telefono",     2, -1, -1, 3, -12.0f, 8.0f, 3.0f,  60.0f, 8.0f, -35.0f },
+    };
+    constexpr int kNumGlobalPresets = (int) (sizeof(kGlobalPresets) / sizeof(kGlobalPresets[0]));
+
+    void applyGlobalPreset(juce::AudioProcessorValueTreeState& s, int i)
+    {
+        const auto& gp = kGlobalPresets[i];
+
+        applyEqPreset(s, gp.eq);
+
+        if (gp.rev >= 0)
+            applyReverbPresetValues(s, gp.rev);
+        else
+            applyValues(s, { { "rev_mix", 0.0f } });
+
+        if (gp.dly >= 0)
+            applyDelayPresetValues(s, gp.dly);
+        else
+            applyValues(s, { { "sfx_delay", 0.0f } });
+
+        applyDynPresetValues(s, gp.dyn);
+
+        applyValues(s, { { "comp_threshold", gp.thr }, { "comp_ratio", gp.ratio },
+                         { "comp_attack", gp.att },    { "comp_release", gp.rel },
+                         { "comp_makeup", gp.mk },     { "dyn_gate", gp.gate } });
+    }
+
+    // Muestra la lista de presets globales filtrada por lo escrito en el buscador
+    void showGlobalPresetMenu(juce::TextEditor& box, juce::AudioProcessorValueTreeState& s)
+    {
+        const juce::String query = box.getText().trim().toLowerCase();
+
+        juce::PopupMenu menu;
+        for (int i = 0; i < kNumGlobalPresets; ++i)
+        {
+            const juce::String name = kGlobalPresets[i].name;
+            if (query.isEmpty() || name.toLowerCase().contains(query))
+                menu.addItem(i + 1, name);
+        }
+
+        if (menu.getNumItems() == 0)
+            return;
+
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&box),
+                           [sp = &s, bp = &box](int result)
+                           {
+                               if (result > 0)
+                               {
+                                   applyGlobalPreset(*sp, result - 1);
+                                   bp->setText(kGlobalPresets[result - 1].name, false);
+                               }
+                           });
     }
 
     juce::Rectangle<int> panelRect(int i, int w, int h)
@@ -510,12 +579,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     subtitle.setVisible(false);
     producer.setVisible(false);
 
+    // Buscador de presets globales: escribe el nombre y pulsa Enter
     searchBox.setTextToShowWhenEmpty("Buscar preset...", Neon::muted);
     searchBox.setColour(juce::TextEditor::backgroundColourId, Neon::panel);
     searchBox.setColour(juce::TextEditor::textColourId, Neon::text);
     searchBox.setColour(juce::TextEditor::outlineColourId, Neon::sky.withAlpha(0.6f));
     searchBox.setColour(juce::TextEditor::focusedOutlineColourId, Neon::sky);
     searchBox.setFont(juce::Font(juce::FontOptions("Segoe UI", 12.0f, juce::Font::plain)));
+    searchBox.onReturnKey = [this] { showGlobalPresetMenu(searchBox, processor.apvts); };
     addAndMakeVisible(searchBox);
 
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
@@ -523,17 +594,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     addAndMakeVisible(presetBox);
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
-
-    // Reverb: se encadena al handler del attachment para no perder la sincronización con el parámetro
-    {
-        auto previous = presetBox.onChange;
-        presetBox.onChange = [this, previous]
-        {
-            if (previous)
-                previous();
-            applyReverbPresetValues(processor.apvts, presetBox.getSelectedId() - 1);
-        };
-    }
 
     eqPresetBox.addItemList(kEqPresets, 1);
     eqPresetBox.setSelectedId(1, juce::dontSendNotification);
@@ -569,7 +629,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         return juce::String(juce::jlimit(0.0, 100.0, (v + 24.0) / 36.0 * 100.0), 0);
     };
 
-    // COMPRESION (celeste)
     setupKnob(compThreshold, "comp_threshold", "THRESHOLD");
     compThreshold.slider.setComponentID("readout");
     compThreshold.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
@@ -588,7 +647,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     tint(compRelease,   Neon::sky);
     tint(compMakeup,    Neon::sky);
 
-    // GATE dentro del compresor
     setupKnob(dynGate, "dyn_gate", "UMBRAL");
     dynGate.slider.setComponentID("readout");
     dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
@@ -598,7 +656,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     gateHyst.slider.textFromValueFunction = [](double v) { return juce::String(v, 1) + " dB"; };
     tint(gateHyst, Neon::sky);
 
-    // EQ 4 BANDAS
     const juce::Colour bandCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
@@ -619,7 +676,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         tint(eqGain[b], bandCol[b]);
     }
 
-    // REVERB · DELAY
     setupKnob(sfxDrive, "sfx_drive", "DRIVE");
     sfxDrive.slider.setComponentID("drive");
     sfxDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
@@ -686,7 +742,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayDiv.label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(delayDiv.label);
 
-    // DYNAMICS
     setupKnob(dynDeess, "dyn_deess", "DE-ESS");
     dynDeess.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     tint(dynDeess, Neon::amber);
@@ -1067,7 +1122,6 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 56);
     }
 
-    // REVERB · DELAY: drive, preset, reverb (4 perillas), modulación, preset de delay y delay
     auto p2 = innerRect(panelRect(2, w, h));
     placeKnob(sfxDrive, p2.removeFromTop(88), 80);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
@@ -1097,7 +1151,6 @@ void VoxStudioEditor::resized()
     placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
     placeKnob(delayDry, dlyBot[2].reduced(2, 0), 62);
 
-    // DYNAMICS
     auto p3 = innerRect(panelRect(3, w, h));
     dynPresetBox.setBounds(p3.removeFromTop(30).reduced(4, 4));
     p3.removeFromTop(8);
