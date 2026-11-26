@@ -517,8 +517,9 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
-    setupPending(revPre, "PRE");
-    revPre.slider.textFromValueFunction = [](double) { return juce::String("--"); };
+    // PRE-DELAY conectado al procesador (rev_pre, en ms)
+    setupKnob(revPre, "rev_pre", "PRE");
+    revPre.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " ms"; };
 
     tint(revRoom, Neon::pink);
     tint(revDamp, Neon::pink);
