@@ -440,7 +440,8 @@ void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
     delayWritePos = (delayWritePos + numSamples) % bufLen;
 }
 
-// Pre-delay con LFO: el tiempo oscila hasta ±4 ms según MOD DEPTH y MOD RATE
+// Pre-delay con LFO calculado por muestra e interpolación lineal.
+// Así el tiempo cambia suave, sin saltos entre bloques (eso causaba el ruido).
 void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
 {
     const float ms    = apvts.getRawParameterValue("rev_pre")->load();
@@ -448,33 +449,39 @@ void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
     const float depth = apvts.getRawParameterValue("mod_depth")->load();
 
     const int bufLen = preDelayBuffer.getNumSamples();
-    if (bufLen <= 1)
+    if (bufLen <= 2)
         return;
 
     const int n = buffer.getNumSamples();
-
-    const double modSamples = depth * 0.004 * currentSampleRate * std::sin(lfoPhase);
-    lfoPhase += 2.0 * juce::MathConstants<double>::pi * rate * n / currentSampleRate;
-    if (lfoPhase > 2.0 * juce::MathConstants<double>::pi)
-        lfoPhase -= 2.0 * juce::MathConstants<double>::pi;
-
-    int delaySamples = static_cast<int>(ms * 0.001 * currentSampleRate + modSamples);
-    delaySamples = juce::jlimit(0, bufLen - 1, delaySamples);
-
     const int numCh = juce::jmin(buffer.getNumChannels(), preDelayBuffer.getNumChannels());
 
-    for (int ch = 0; ch < numCh; ++ch)
-    {
-        auto* data = buffer.getWritePointer(ch);
-        auto* pb = preDelayBuffer.getWritePointer(ch);
-        int wp = preDelayWritePos;
+    const double baseSamples = ms * 0.001 * currentSampleRate;
+    const double modAmp      = depth * 0.004 * currentSampleRate;
+    const double lfoInc      = 2.0 * juce::MathConstants<double>::pi * rate / currentSampleRate;
+    const double twoPi       = 2.0 * juce::MathConstants<double>::pi;
 
-        for (int i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i)
+    {
+        const double d = juce::jlimit(0.0, bufLen - 2.0, baseSamples + modAmp * std::sin(lfoPhase));
+
+        lfoPhase += lfoInc;
+        if (lfoPhase > twoPi)
+            lfoPhase -= twoPi;
+
+        const int i0 = static_cast<int>(d);
+        const float frac = static_cast<float>(d - i0);
+
+        for (int ch = 0; ch < numCh; ++ch)
         {
-            const int rp = (wp - delaySamples + bufLen) % bufLen;
+            auto* data = buffer.getWritePointer(ch);
+            auto* pb   = preDelayBuffer.getWritePointer(ch);
+
+            const int wp = (preDelayWritePos + i) % bufLen;
             pb[wp] = data[i];
-            data[i] = pb[rp];
-            wp = (wp + 1) % bufLen;
+
+            const int r0 = (wp - i0 + bufLen) % bufLen;
+            const int r1 = (r0 - 1 + bufLen) % bufLen;
+            data[i] = pb[r0] * (1.0f - frac) + pb[r1] * frac;
         }
     }
 
