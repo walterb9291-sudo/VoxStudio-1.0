@@ -473,14 +473,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     tint(compRelease,   Neon::sky);
     tint(compMakeup,    Neon::sky);
 
-    // GATE dentro del compresor
+    // GATE dentro del compresor: UMBRAL e HISTERESIS (ahora conectada)
     setupKnob(dynGate, "dyn_gate", "UMBRAL");
     dynGate.slider.setComponentID("readout");
     dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
     tint(dynGate, Neon::sky);
 
-    setupPending(gateHyst, "HISTERESIS");
-    gateHyst.slider.textFromValueFunction = [](double) { return juce::String("6 dB"); };
+    setupKnob(gateHyst, "dyn_hyst", "HISTERESIS");
+    gateHyst.slider.textFromValueFunction = [](double v) { return juce::String(v, 1) + " dB"; };
     tint(gateHyst, Neon::sky);
 
     // EQ 4 BANDAS
@@ -517,7 +517,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(revMix,  "rev_mix",  "MIX");
     revMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
 
-    // PRE-DELAY conectado al procesador (rev_pre, en ms)
     setupKnob(revPre, "rev_pre", "PRE");
     revPre.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " ms"; };
 
@@ -572,16 +571,30 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     tint(dynFocus, Neon::amber);
 
-    setupPending(dynDrive,   "DRIVE");
-    setupPending(dynColor,   "COLOR");
-    setupPending(dynHpFreq,  "HP FREQ");
-    setupPending(dynLpFreq,  "LP FREQ");
-    setupPending(dynMix,     "MIX");
-    tint(dynDrive,  Neon::amber);
-    tint(dynColor,  Neon::amber);
+    setupKnob(dynDrive, "dyn_drive", "DRIVE");
+    dynDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+    tint(dynDrive, Neon::amber);
+
+    setupKnob(dynColor, "dyn_color", "COLOR");
+    dynColor.slider.textFromValueFunction = [](double v) {
+        const double db = (v - 0.5) * 12.0;
+        return (db > 0.0 ? "+" : "") + juce::String(db, 1) + " dB";
+    };
+    tint(dynColor, Neon::amber);
+
+    setupKnob(dynHpFreq, "dyn_hp", "HP FREQ");
+    dynHpFreq.slider.textFromValueFunction = [](double v) { return juce::String((int) v) + " Hz"; };
     tint(dynHpFreq, Neon::violet);
+
+    setupKnob(dynLpFreq, "dyn_lp", "LP FREQ");
+    dynLpFreq.slider.textFromValueFunction = [](double v) {
+        return v >= 1000.0 ? juce::String(v / 1000.0, 1) + "k" : juce::String((int) v) + " Hz";
+    };
     tint(dynLpFreq, Neon::amber);
-    tint(dynMix,    Neon::amber);
+
+    setupKnob(dynMix, "dyn_mix", "MIX");
+    dynMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+    tint(dynMix, Neon::amber);
 
     startTimerHz(30);
 }
