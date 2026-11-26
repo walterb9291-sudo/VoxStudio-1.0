@@ -100,7 +100,6 @@ namespace
     juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
     juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
 
-    // Icono de voz: barras verticales de distinta altura
     void drawVoiceIcon(juce::Graphics& g, float x, float cy)
     {
         const float heights[] = { 10.0f, 20.0f, 30.0f, 16.0f, 8.0f };
@@ -112,7 +111,6 @@ namespace
         }
     }
 
-    // Espectro del pie, como en el boceto
     void drawFooterIcon(juce::Graphics& g, float cx, float cy)
     {
         g.setColour(Neon::panel);
@@ -230,7 +228,6 @@ namespace
         }
     }
 
-    // VU grande, inspirado en la idea de los VU de estudio: escala amplia y aguja larga
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
     {
         g.setColour(Neon::bg);
@@ -473,7 +470,7 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     tint(compRelease,   Neon::sky);
     tint(compMakeup,    Neon::sky);
 
-    // GATE dentro del compresor: UMBRAL e HISTERESIS (ahora conectada)
+    // GATE dentro del compresor
     setupKnob(dynGate, "dyn_gate", "UMBRAL");
     dynGate.slider.setComponentID("readout");
     dynGate.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " dB"; };
@@ -512,6 +509,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
 
     setupKnob(revRoom, "rev_room", "ROOM");
     revRoom.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
+
+    setupKnob(revDecay, "rev_decay", "DECAY");
+    revDecay.slider.textFromValueFunction = [](double v) { return juce::String(v, 1) + " s"; };
+
     setupKnob(revDamp, "rev_damp", "DAMP");
     revDamp.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
     setupKnob(revMix,  "rev_mix",  "MIX");
@@ -520,10 +521,18 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(revPre, "rev_pre", "PRE");
     revPre.slider.textFromValueFunction = [](double v) { return juce::String(v, 0) + " ms"; };
 
-    tint(revRoom, Neon::pink);
-    tint(revDamp, Neon::pink);
-    tint(revMix,  Neon::pink);
-    tint(revPre,  Neon::pink);
+    setupKnob(modRate, "mod_rate", "RATE");
+    modRate.slider.textFromValueFunction = [](double v) { return juce::String(v, 2) + " Hz"; };
+    setupKnob(modDepth, "mod_depth", "DEPTH");
+    modDepth.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+
+    tint(revRoom,  Neon::pink);
+    tint(revDecay, Neon::pink);
+    tint(revDamp,  Neon::pink);
+    tint(revMix,   Neon::pink);
+    tint(revPre,   Neon::pink);
+    tint(modRate,  Neon::pink);
+    tint(modDepth, Neon::pink);
 
     setupKnob(delayMix, "sfx_delay", "WET");
     delayMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0); };
@@ -774,7 +783,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
             g.fillRect(x, y, 1, 1);
     }
 
-    // Cabecera: icono de voz, "VoxStudio" en violeta y "TiemFX" chico debajo
     g.setGradientFill(juce::ColourGradient(Neon::panel, 0.0f, 0.0f, Neon::bg, (float) w, 0.0f, false));
     g.fillRect(0.0f, 0.0f, (float) w, (float) headerH);
     g.setColour(Neon::grid);
@@ -799,14 +807,12 @@ void VoxStudioEditor::paint(juce::Graphics& g)
     for (int i = 0; i < 4; ++i)
         drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i], icons[i]);
 
-    // VU grande en la parte alta del compresor
     {
         const auto p0 = panelRect(0, w, h);
         drawVuMeter(g, juce::Rectangle<float>((float) p0.getX() + 12.0f, (float) panelTop + 46.0f,
                                               (float) p0.getWidth() - 24.0f, 80.0f), grLevel);
     }
 
-    // Caja GATE dentro del compresor
     {
         const auto gr = gateBoxRect(w, h);
         g.setColour(Neon::sky.withAlpha(0.6f));
@@ -824,7 +830,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse((float) gr.getRight() - 20.0f, (float) gr.getY() + 10.0f, 6.0f, 6.0f);
     }
 
-    // EQ: espectro de la voz detras de la curva
     const auto area = eqArea();
     g.setColour(Neon::bg.withAlpha(0.9f));
     g.fillRoundedRectangle(area, 8.0f);
@@ -898,7 +903,6 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         g.fillEllipse(p.x - 5.0f, p.y - 5.0f, 10.0f, 10.0f);
     }
 
-    // Medidores laterales
     drawSideMeter(g, { pad / 2, panelTop, sideW - pad, h - panelTop - footerH }, inLevel);
     drawSideMeter(g, { w - sideW + pad / 2, panelTop, sideW - pad, h - panelTop - footerH }, outLevel);
 
@@ -916,11 +920,9 @@ void VoxStudioEditor::resized()
     const auto c2 = panelRect(2, w, h);
     const auto c3 = panelRect(3, w, h);
 
-    // Buscador a la izquierda del BYPASS
     searchBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
 
-    // COMPRESION: VU arriba, umbral grande, cuatro perillas y caja GATE
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(88);
     placeKnob(compThreshold, p0.removeFromTop(120), 108);
@@ -936,7 +938,6 @@ void VoxStudioEditor::resized()
     placeKnob(dynGate,  gateCells[0], 56);
     placeKnob(gateHyst, gateCells[1], 56);
 
-    // EQ: presets arriba, luego FREQ y GAIN por banda
     eqPresetBox.setBounds(eqPresetRect(w, h));
 
     const auto bands = eqBandsArea(w, h);
@@ -948,30 +949,35 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 56);
     }
 
-    // REVERB · DELAY
+    // REVERB · DELAY: drive, preset, reverb (4 perillas), modulación, preset de delay y delay
     auto p2 = innerRect(panelRect(2, w, h));
-    placeKnob(sfxDrive, p2.removeFromTop(96), 84);
+    placeKnob(sfxDrive, p2.removeFromTop(88), 80);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
     p2.removeFromTop(6);
 
-    const auto revCells = cellsOf(p2.removeFromTop(84), 4, 1);
-    placeKnob(revRoom, revCells[0].reduced(2, 0), 46);
-    placeKnob(revDamp, revCells[1].reduced(2, 0), 46);
-    placeKnob(revMix,  revCells[2].reduced(2, 0), 46);
-    placeKnob(revPre,  revCells[3].reduced(2, 0), 46);
+    const auto revCells = cellsOf(p2.removeFromTop(80), 4, 1);
+    placeKnob(revRoom,  revCells[0].reduced(2, 0), 44);
+    placeKnob(revDecay, revCells[1].reduced(2, 0), 44);
+    placeKnob(revMix,   revCells[2].reduced(2, 0), 44);
+    placeKnob(revPre,   revCells[3].reduced(2, 0), 44);
+    p2.removeFromTop(6);
+
+    const auto modCells = cellsOf(p2.removeFromTop(58), 2, 1);
+    placeKnob(modRate,  modCells[0].reduced(2, 0), 44);
+    placeKnob(modDepth, modCells[1].reduced(2, 0), 44);
     p2.removeFromTop(6);
 
     delayPresetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
     p2.removeFromTop(6);
 
-    const auto dlyTop = cellsOf(p2.removeFromTop(84), 2, 1);
-    placeKnob(delayDiv, dlyTop[0], 62);
-    placeKnob(delayFb,  dlyTop[1], 62);
+    const auto dlyTop = cellsOf(p2.removeFromTop(72), 2, 1);
+    placeKnob(delayDiv, dlyTop[0], 56);
+    placeKnob(delayFb,  dlyTop[1], 56);
 
     const auto dlyBot = cellsOf(p2, 3, 1);
-    placeKnob(delayDrv, dlyBot[0].reduced(2, 0), 84);
+    placeKnob(delayDrv, dlyBot[0].reduced(2, 0), 62);
     placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
-    placeKnob(delayDry, dlyBot[2].reduced(2, 0), 84);
+    placeKnob(delayDry, dlyBot[2].reduced(2, 0), 62);
 
     // DYNAMICS
     auto p3 = innerRect(panelRect(3, w, h));
@@ -995,7 +1001,6 @@ void VoxStudioEditor::resized()
 
     placeKnob(dynMix, p3, 56);
 
-    // Pie: INPUT a la izquierda, OUTPUT a la derecha
     inGain.slider.setBounds(pad + 4, h - footerH + 8, 52, 52);
     inGain.label.setBounds(pad + 60, h - footerH + 30, 70, 14);
     inGain.label.setJustificationType(juce::Justification::left);
