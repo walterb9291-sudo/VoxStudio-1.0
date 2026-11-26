@@ -93,10 +93,13 @@ private:
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
 
-    // Pre-delay del reverb (hasta 200 ms) y copia de trabajo solo para la cola de reverb
+    // Pre-delay del reverb (hasta 200 ms + modulación) y copia de trabajo para la cola
     juce::AudioBuffer<float> preDelayBuffer;
     int preDelayWritePos = 0;
     juce::AudioBuffer<float> revSendBuffer;
+
+    // LFO de modulación del reverb
+    double lfoPhase = 0.0;
 
     // Analizador de espectro (FFT de 2048 muestras)
     juce::dsp::FFT fft { 11 };
