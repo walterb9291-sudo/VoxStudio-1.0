@@ -66,6 +66,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_mix", "Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.25f));
     params.push_back(std::make_unique<juce::AudioParameterInt>("rev_preset", "Preset", 0, 4, 0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_pre", "Pre-Delay",
+        juce::NormalisableRange<float>(0.0f, 200.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_drive", "Drive",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
@@ -112,6 +114,14 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayBuffer.setSize(2, maxDelay);
     delayBuffer.clear();
     delayWritePos = 0;
+
+    // Pre-delay: hasta 200 ms, y copia de trabajo del tamaño del bloque
+    preDelayBuffer.setSize(2, static_cast<int>(sampleRate * 0.2) + 1);
+    preDelayBuffer.clear();
+    preDelayWritePos = 0;
+
+    revSendBuffer.setSize(2, samplesPerBlock);
+    revSendBuffer.clear();
 
     gateEnv = 0.0f;
     gateGainSm = 0.0f;
@@ -346,6 +356,75 @@ void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
     delayWritePos = (delayWritePos + numSamples) % bufLen;
 }
 
+// Retardo de la señal que alimenta el reverb (no toca la voz seca)
+void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
+{
+    const float ms = apvts.getRawParameterValue("rev_pre")->load();
+    const int bufLen = preDelayBuffer.getNumSamples();
+    if (bufLen <= 1)
+        return;
+
+    int delaySamples = static_cast<int>(ms * 0.001 * currentSampleRate);
+    delaySamples = juce::jlimit(0, bufLen - 1, delaySamples);
+    if (delaySamples == 0)
+        return;
+
+    const int n = buffer.getNumSamples();
+    const int numCh = juce::jmin(buffer.getNumChannels(), preDelayBuffer.getNumChannels());
+
+    for (int ch = 0; ch < numCh; ++ch)
+    {
+        auto* data = buffer.getWritePointer(ch);
+        auto* pb = preDelayBuffer.getWritePointer(ch);
+        int wp = preDelayWritePos;
+
+        for (int i = 0; i < n; ++i)
+        {
+            const int rp = (wp - delaySamples + bufLen) % bufLen;
+            pb[wp] = data[i];
+            data[i] = pb[rp];
+            wp = (wp + 1) % bufLen;
+        }
+    }
+
+    preDelayWritePos = (preDelayWritePos + n) % bufLen;
+}
+
+// Reverb con pre-delay: la cola se procesa aparte, así la voz seca no se retrasa
+void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    if (buffer.getNumChannels() < 2)
+        return;
+
+    updateReverb();
+
+    if (revSendBuffer.getNumSamples() < n)
+    {
+        reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), n);
+        return;
+    }
+
+    const float mix = apvts.getRawParameterValue("rev_mix")->load();
+
+    for (int ch = 0; ch < 2; ++ch)
+        revSendBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
+
+    processPreDelay(revSendBuffer);
+
+    // Cola al 100 % mojada, para mezclarla después con la voz seca
+    reverbParams.dryLevel = 0.0f;
+    reverbParams.wetLevel = 1.0f;
+    reverb.setParameters(reverbParams);
+    reverb.processStereo(revSendBuffer.getWritePointer(0), revSendBuffer.getWritePointer(1), n);
+
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        buffer.applyGain(ch, 0, n, 1.0f - mix);
+        buffer.addFrom(ch, 0, revSendBuffer, ch, 0, n, mix);
+    }
+}
+
 void VoxStudioProcessor::pushSpectrum(const juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
@@ -436,9 +515,8 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     processSFX(buffer);
 
-    updateReverb();
-    if (buffer.getNumChannels() >= 2)
-        reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), buffer.getNumSamples());
+    // 7. Reverb con pre-delay
+    processReverbWithPreDelay(buffer);
 
     outputGain.setGainDecibels(apvts.getRawParameterValue("out_gain")->load());
     outputGain.process(ctx);
