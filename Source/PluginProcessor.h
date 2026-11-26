@@ -52,8 +52,10 @@ private:
     void updateReverb();
     void updateEq();
     void updateDeEsser();
+    void updateDynFilters();
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processDeEsser(juce::AudioBuffer<float>& buffer);
+    void processDynModule(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
     void processPreDelay(juce::AudioBuffer<float>& buffer);
     void processReverbWithPreDelay(juce::AudioBuffer<float>& buffer);
@@ -74,6 +76,12 @@ private:
     using FilterBand = juce::dsp::ProcessorDuplicator<Filter, juce::dsp::IIR::Coefficients<float>>;
     std::array<FilterBand, numEqBands> eqBands;
     FilterBand deEsserBand;
+
+    // Módulo DYNAMICS: color (shelf), paso alto y paso bajo
+    FilterBand dynColorBand;
+    FilterBand dynHpBand;
+    FilterBand dynLpBand;
+    juce::AudioBuffer<float> dynDryBuffer;
 
     float gateEnv = 0.0f;
     float gateGainSm = 0.0f;
