@@ -31,10 +31,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_gate", "Gate",
         juce::NormalisableRange<float>(-80.0f, 0.0f, 0.1f), -50.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_hyst", "Hysteresis",
+        juce::NormalisableRange<float>(0.0f, 12.0f, 0.1f), 6.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_deess", "De-Ess",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_focus", "Focus",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_drive", "Dyn Drive",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_color", "Color",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_hp", "HP Freq",
+        juce::NormalisableRange<float>(20.0f, 500.0f, 0.1f, 0.4f), 20.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_lp", "LP Freq",
+        juce::NormalisableRange<float>(2000.0f, 20000.0f, 1.0f, 0.4f), 20000.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_mix", "Dyn Mix",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 1.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_threshold", "Threshold",
         juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -18.0f));
@@ -106,6 +118,12 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         band.prepare(spec);
     deEsserBand.prepare(spec);
 
+    dynColorBand.prepare(spec);
+    dynHpBand.prepare(spec);
+    dynLpBand.prepare(spec);
+    dynDryBuffer.setSize(2, samplesPerBlock);
+    dynDryBuffer.clear();
+
     sideBuffer.setSize(2, samplesPerBlock);
     sideBuffer.clear();
     deEsserEnv = 0.0f;
@@ -115,7 +133,6 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayBuffer.clear();
     delayWritePos = 0;
 
-    // Pre-delay: hasta 200 ms, y copia de trabajo del tamaño del bloque
     preDelayBuffer.setSize(2, static_cast<int>(sampleRate * 0.2) + 1);
     preDelayBuffer.clear();
     preDelayWritePos = 0;
@@ -197,11 +214,29 @@ void VoxStudioProcessor::updateDeEsser()
     *deEsserBand.state = *coeffs;
 }
 
+// Color (shelf de agudos de -6 a +6 dB), paso alto y paso bajo del módulo DYNAMICS
+void VoxStudioProcessor::updateDynFilters()
+{
+    const float hp  = apvts.getRawParameterValue("dyn_hp")->load();
+    const float lp  = apvts.getRawParameterValue("dyn_lp")->load();
+    const float col = apvts.getRawParameterValue("dyn_color")->load();
+    const float nyq = 0.45f * (float) currentSampleRate;
+
+    *dynHpBand.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass((float) currentSampleRate,
+                                                                          juce::jmin(hp, nyq), 0.707f);
+    *dynLpBand.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass((float) currentSampleRate,
+                                                                         juce::jmin(lp, nyq), 0.707f);
+    *dynColorBand.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf((float) currentSampleRate, 3000.0f, 0.707f,
+                              juce::Decibels::decibelsToGain((col - 0.5f) * 12.0f));
+}
+
+// Gate con histéresis: abre en el umbral y cierra dyn_hyst dB por debajo
 void VoxStudioProcessor::processDynamics(juce::AudioBuffer<float>& buffer)
 {
     const float thrDb    = apvts.getRawParameterValue("dyn_gate")->load();
+    const float hyst     = apvts.getRawParameterValue("dyn_hyst")->load();
     const float openLin  = juce::Decibels::decibelsToGain(thrDb);
-    const float closeLin = juce::Decibels::decibelsToGain(thrDb - 6.0f);
+    const float closeLin = juce::Decibels::decibelsToGain(thrDb - hyst);
     const float attackC  = std::exp(-1.0f / (0.003f * (float) currentSampleRate));
     const float releaseC = std::exp(-1.0f / (0.150f * (float) currentSampleRate));
     const float envC     = std::exp(-1.0f / (0.010f * (float) currentSampleRate));
@@ -280,6 +315,45 @@ void VoxStudioProcessor::processDeEsser(juce::AudioBuffer<float>& buffer)
 
         d0[i] -= b0[i] * (1.0f - g);
         d1[i] -= b1[i] * (1.0f - g);
+    }
+}
+
+// Módulo DYNAMICS: drive, color, paso alto/bajo y mezcla con la señal sin procesar
+void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    if (buffer.getNumChannels() < 2 || n == 0 || dynDryBuffer.getNumSamples() < n)
+        return;
+
+    const float mix   = apvts.getRawParameterValue("dyn_mix")->load();
+    const float drive = apvts.getRawParameterValue("dyn_drive")->load();
+
+    for (int ch = 0; ch < 2; ++ch)
+        dynDryBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
+
+    if (drive > 0.0f)
+    {
+        const float k    = 1.0f + drive * 9.0f;
+        const float norm = std::tanh(k);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            auto* d = buffer.getWritePointer(ch);
+            for (int i = 0; i < n; ++i)
+                d[i] = std::tanh(d[i] * k) / norm;
+        }
+    }
+
+    updateDynFilters();
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> ctx(block);
+    dynHpBand.process(ctx);
+    dynLpBand.process(ctx);
+    dynColorBand.process(ctx);
+
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        buffer.applyGain(ch, 0, n, mix);
+        buffer.addFrom(ch, 0, dynDryBuffer, ch, 0, n, 1.0f - mix);
     }
 }
 
@@ -412,7 +486,6 @@ void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buf
 
     processPreDelay(revSendBuffer);
 
-    // Cola al 100 % mojada, para mezclarla después con la voz seca
     reverbParams.dryLevel = 0.0f;
     reverbParams.wetLevel = 1.0f;
     reverb.setParameters(reverbParams);
@@ -489,9 +562,16 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     inputGain.setGainDecibels(apvts.getRawParameterValue("in_gain")->load());
     inputGain.process(ctx);
 
+    // 1. Gate con histéresis
     processDynamics(buffer);
+
+    // 2. De-Esser
     processDeEsser(buffer);
 
+    // 3. Módulo DYNAMICS: drive, color, filtros y mezcla
+    processDynModule(buffer);
+
+    // 4. Compresor
     updateCompressor();
     compressor.process(ctx);
 
@@ -515,7 +595,6 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     processSFX(buffer);
 
-    // 7. Reverb con pre-delay
     processReverbWithPreDelay(buffer);
 
     outputGain.setGainDecibels(apvts.getRawParameterValue("out_gain")->load());
