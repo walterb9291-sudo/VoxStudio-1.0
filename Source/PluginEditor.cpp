@@ -35,6 +35,110 @@ namespace
     const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
     const juce::StringArray kEqPresets    { "Warm", "Airy", "Tape", "Flat" };
 
+    // ---------- Presets por columna ----------
+    struct PV { const char* id; float value; };
+
+    void applyValues(juce::AudioProcessorValueTreeState& s, std::initializer_list<PV> list)
+    {
+        for (const auto& pv : list)
+            if (auto* p = s.getParameter(pv.id))
+                p->setValueNotifyingHost(p->convertTo0to1(pv.value));
+    }
+
+    // EQ: frecuencias y ganancias de las cuatro bandas
+    void applyEqPreset(juce::AudioProcessorValueTreeState& s, int i)
+    {
+        switch (i)
+        {
+            case 0: // Warm: más cuerpo en medios-graves y menos agudos
+                applyValues(s, { { "eq1_freq", 150.0f }, { "eq1_gain", 1.5f },
+                                 { "eq2_freq", 400.0f }, { "eq2_gain", 0.5f },
+                                 { "eq3_freq", 2500.0f }, { "eq3_gain", -1.0f },
+                                 { "eq4_freq", 9000.0f }, { "eq4_gain", -2.5f } });
+                break;
+            case 1: // Airy: corta el lodo y abre el aire
+                applyValues(s, { { "eq1_freq", 120.0f }, { "eq1_gain", -1.5f },
+                                 { "eq2_freq", 350.0f }, { "eq2_gain", -1.0f },
+                                 { "eq3_freq", 3000.0f }, { "eq3_gain", 1.0f },
+                                 { "eq4_freq", 12000.0f }, { "eq4_gain", 3.0f } });
+                break;
+            case 2: // Tape: graves suaves y agudos redondeados
+                applyValues(s, { { "eq1_freq", 100.0f }, { "eq1_gain", 1.0f },
+                                 { "eq2_freq", 1000.0f }, { "eq2_gain", -0.5f },
+                                 { "eq3_freq", 3500.0f }, { "eq3_gain", -1.5f },
+                                 { "eq4_freq", 10000.0f }, { "eq4_gain", -3.0f } });
+                break;
+            default: // Flat: sin corrección
+                applyValues(s, { { "eq1_freq", 120.0f }, { "eq1_gain", 0.0f },
+                                 { "eq2_freq", 500.0f }, { "eq2_gain", 0.0f },
+                                 { "eq3_freq", 2500.0f }, { "eq3_gain", 0.0f },
+                                 { "eq4_freq", 8000.0f }, { "eq4_gain", 0.0f } });
+                break;
+        }
+    }
+
+    // Reverb: tipo, tamaño, decay, amortiguación, mezcla y pre-delay
+    void applyReverbPresetValues(juce::AudioProcessorValueTreeState& s, int i)
+    {
+        switch (i)
+        {
+            case 0: applyValues(s, { { "rev_preset", 0.0f }, { "rev_room", 0.3f }, { "rev_decay", 0.8f },
+                                     { "rev_damp", 0.6f }, { "rev_mix", 0.2f }, { "rev_pre", 5.0f } }); break;
+            case 1: applyValues(s, { { "rev_preset", 1.0f }, { "rev_room", 0.7f }, { "rev_decay", 2.8f },
+                                     { "rev_damp", 0.4f }, { "rev_mix", 0.25f }, { "rev_pre", 20.0f } }); break;
+            case 2: applyValues(s, { { "rev_preset", 2.0f }, { "rev_room", 0.5f }, { "rev_decay", 1.8f },
+                                     { "rev_damp", 0.2f }, { "rev_mix", 0.25f }, { "rev_pre", 10.0f } }); break;
+            case 3: applyValues(s, { { "rev_preset", 3.0f }, { "rev_room", 0.45f }, { "rev_decay", 1.6f },
+                                     { "rev_damp", 0.7f }, { "rev_mix", 0.2f }, { "rev_pre", 30.0f } }); break;
+            default: applyValues(s, { { "rev_preset", 4.0f }, { "rev_room", 0.9f }, { "rev_decay", 4.0f },
+                                      { "rev_damp", 0.1f }, { "rev_mix", 0.3f }, { "rev_pre", 40.0f } }); break;
+        }
+    }
+
+    // Delay: división, feedback, mezcla, dry y drive de los ecos
+    void applyDelayPresetValues(juce::AudioProcessorValueTreeState& s, int i)
+    {
+        switch (i)
+        {
+            case 0: applyValues(s, { { "sfx_delay_div", 3.0f }, { "sfx_delay_fb", 0.15f }, { "sfx_delay", 0.20f },
+                                     { "sfx_delay_dry", 1.0f }, { "sfx_delay_drv", 0.0f } }); break;
+            case 1: applyValues(s, { { "sfx_delay_div", 5.0f }, { "sfx_delay_fb", 0.40f }, { "sfx_delay", 0.25f },
+                                     { "sfx_delay_dry", 1.0f }, { "sfx_delay_drv", 0.1f } }); break;
+            case 2: applyValues(s, { { "sfx_delay_div", 3.0f }, { "sfx_delay_fb", 0.45f }, { "sfx_delay", 0.30f },
+                                     { "sfx_delay_dry", 1.0f }, { "sfx_delay_drv", 0.0f } }); break;
+            case 3: applyValues(s, { { "sfx_delay_div", 2.0f }, { "sfx_delay_fb", 0.50f }, { "sfx_delay", 0.30f },
+                                     { "sfx_delay_dry", 0.9f }, { "sfx_delay_drv", 0.4f } }); break;
+            default: applyValues(s, { { "sfx_delay_div", 0.0f }, { "sfx_delay_fb", 0.70f }, { "sfx_delay", 0.35f },
+                                      { "sfx_delay_dry", 0.9f }, { "sfx_delay_drv", 0.2f } }); break;
+        }
+    }
+
+    // DYNAMICS: drive, color, filtros, de-esser y mezcla
+    void applyDynPresetValues(juce::AudioProcessorValueTreeState& s, int i)
+    {
+        switch (i)
+        {
+            case 0: applyValues(s, { { "dyn_drive", 0.25f }, { "dyn_color", 0.45f }, { "dyn_hp", 30.0f },
+                                     { "dyn_lp", 16000.0f }, { "dyn_deess", 0.20f }, { "dyn_focus", 0.50f },
+                                     { "dyn_mix", 1.0f } }); break;
+            case 1: applyValues(s, { { "dyn_drive", 0.0f }, { "dyn_color", 0.50f }, { "dyn_hp", 60.0f },
+                                     { "dyn_lp", 20000.0f }, { "dyn_deess", 0.10f }, { "dyn_focus", 0.50f },
+                                     { "dyn_mix", 1.0f } }); break;
+            case 2: applyValues(s, { { "dyn_drive", 0.50f }, { "dyn_color", 0.55f }, { "dyn_hp", 80.0f },
+                                     { "dyn_lp", 12000.0f }, { "dyn_deess", 0.30f }, { "dyn_focus", 0.55f },
+                                     { "dyn_mix", 1.0f } }); break;
+            case 3: applyValues(s, { { "dyn_drive", 0.60f }, { "dyn_color", 0.20f }, { "dyn_hp", 180.0f },
+                                     { "dyn_lp", 4500.0f }, { "dyn_deess", 0.0f }, { "dyn_focus", 0.50f },
+                                     { "dyn_mix", 0.9f } }); break;
+            case 4: applyValues(s, { { "dyn_drive", 0.35f }, { "dyn_color", 0.40f }, { "dyn_hp", 50.0f },
+                                     { "dyn_lp", 10000.0f }, { "dyn_deess", 0.25f }, { "dyn_focus", 0.45f },
+                                     { "dyn_mix", 1.0f } }); break;
+            default: applyValues(s, { { "dyn_drive", 0.15f }, { "dyn_color", 0.60f }, { "dyn_hp", 40.0f },
+                                      { "dyn_lp", 20000.0f }, { "dyn_deess", 0.35f }, { "dyn_focus", 0.60f },
+                                      { "dyn_mix", 1.0f } }); break;
+        }
+    }
+
     juce::Rectangle<int> panelRect(int i, int w, int h)
     {
         const int colW = (w - 2 * sideW - 2 * pad - 3 * gap) / 4;
@@ -420,19 +524,33 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
         *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
+    // Reverb: se encadena al handler del attachment para no perder la sincronización con el parámetro
+    {
+        auto previous = presetBox.onChange;
+        presetBox.onChange = [this, previous]
+        {
+            if (previous)
+                previous();
+            applyReverbPresetValues(processor.apvts, presetBox.getSelectedId() - 1);
+        };
+    }
+
     eqPresetBox.addItemList(kEqPresets, 1);
     eqPresetBox.setSelectedId(1, juce::dontSendNotification);
     eqPresetBox.setJustificationType(juce::Justification::centred);
+    eqPresetBox.onChange = [this] { applyEqPreset(processor.apvts, eqPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(eqPresetBox);
 
     dynPresetBox.addItemList(kDynPresets, 1);
     dynPresetBox.setSelectedId(1, juce::dontSendNotification);
     dynPresetBox.setJustificationType(juce::Justification::centredLeft);
+    dynPresetBox.onChange = [this] { applyDynPresetValues(processor.apvts, dynPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(dynPresetBox);
 
     delayPresetBox.addItemList(kDelayPresets, 1);
     delayPresetBox.setSelectedId(1, juce::dontSendNotification);
     delayPresetBox.setJustificationType(juce::Justification::centredLeft);
+    delayPresetBox.onChange = [this] { applyDelayPresetValues(processor.apvts, delayPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(delayPresetBox);
 
     bypassButton.setClickingTogglesState(true);
