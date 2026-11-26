@@ -73,6 +73,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_room", "Room Size",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_decay", "Decay",
+        juce::NormalisableRange<float>(0.1f, 5.0f, 0.01f), 1.8f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_damp", "Damping",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_mix", "Mix",
@@ -80,6 +82,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterInt>("rev_preset", "Preset", 0, 4, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_pre", "Pre-Delay",
         juce::NormalisableRange<float>(0.0f, 200.0f, 0.1f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("mod_rate", "Mod Rate",
+        juce::NormalisableRange<float>(0.05f, 5.0f, 0.01f, 0.5f), 0.8f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("mod_depth", "Mod Depth",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.35f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_drive", "Drive",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
@@ -133,9 +139,11 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayBuffer.clear();
     delayWritePos = 0;
 
-    preDelayBuffer.setSize(2, static_cast<int>(sampleRate * 0.2) + 1);
+    // 250 ms: 200 ms de pre-delay más margen para la modulación
+    preDelayBuffer.setSize(2, static_cast<int>(sampleRate * 0.25) + 1);
     preDelayBuffer.clear();
     preDelayWritePos = 0;
+    lfoPhase = 0.0;
 
     revSendBuffer.setSize(2, samplesPerBlock);
     revSendBuffer.clear();
@@ -178,11 +186,16 @@ void VoxStudioProcessor::updateCompressor()
     compressor.setRelease(apvts.getRawParameterValue("comp_release")->load());
 }
 
+// ROOM define el tamaño base y DECAY empuja la cola más larga o más corta
 void VoxStudioProcessor::updateReverb()
 {
     applyReverbPreset(static_cast<int>(apvts.getRawParameterValue("rev_preset")->load()));
 
-    reverbParams.roomSize = apvts.getRawParameterValue("rev_room")->load();
+    const float room   = apvts.getRawParameterValue("rev_room")->load();
+    const float decay  = apvts.getRawParameterValue("rev_decay")->load();
+    const float decayN = juce::jlimit(0.0f, 1.0f, (decay - 0.1f) / 4.9f);
+
+    reverbParams.roomSize = juce::jlimit(0.0f, 1.0f, room * 0.5f + decayN * 0.5f);
     reverbParams.damping  = apvts.getRawParameterValue("rev_damp")->load();
     const float mix = apvts.getRawParameterValue("rev_mix")->load();
     reverbParams.wetLevel = mix;
@@ -214,7 +227,6 @@ void VoxStudioProcessor::updateDeEsser()
     *deEsserBand.state = *coeffs;
 }
 
-// Color (shelf de agudos de -6 a +6 dB), paso alto y paso bajo del módulo DYNAMICS
 void VoxStudioProcessor::updateDynFilters()
 {
     const float hp  = apvts.getRawParameterValue("dyn_hp")->load();
@@ -230,7 +242,6 @@ void VoxStudioProcessor::updateDynFilters()
                               juce::Decibels::decibelsToGain((col - 0.5f) * 12.0f));
 }
 
-// Gate con histéresis: abre en el umbral y cierra dyn_hyst dB por debajo
 void VoxStudioProcessor::processDynamics(juce::AudioBuffer<float>& buffer)
 {
     const float thrDb    = apvts.getRawParameterValue("dyn_gate")->load();
@@ -318,7 +329,6 @@ void VoxStudioProcessor::processDeEsser(juce::AudioBuffer<float>& buffer)
     }
 }
 
-// Módulo DYNAMICS: drive, color, paso alto/bajo y mezcla con la señal sin procesar
 void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
@@ -430,20 +440,27 @@ void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
     delayWritePos = (delayWritePos + numSamples) % bufLen;
 }
 
-// Retardo de la señal que alimenta el reverb (no toca la voz seca)
+// Pre-delay con LFO: el tiempo oscila hasta ±4 ms según MOD DEPTH y MOD RATE
 void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
 {
-    const float ms = apvts.getRawParameterValue("rev_pre")->load();
+    const float ms    = apvts.getRawParameterValue("rev_pre")->load();
+    const float rate  = apvts.getRawParameterValue("mod_rate")->load();
+    const float depth = apvts.getRawParameterValue("mod_depth")->load();
+
     const int bufLen = preDelayBuffer.getNumSamples();
     if (bufLen <= 1)
         return;
 
-    int delaySamples = static_cast<int>(ms * 0.001 * currentSampleRate);
-    delaySamples = juce::jlimit(0, bufLen - 1, delaySamples);
-    if (delaySamples == 0)
-        return;
-
     const int n = buffer.getNumSamples();
+
+    const double modSamples = depth * 0.004 * currentSampleRate * std::sin(lfoPhase);
+    lfoPhase += 2.0 * juce::MathConstants<double>::pi * rate * n / currentSampleRate;
+    if (lfoPhase > 2.0 * juce::MathConstants<double>::pi)
+        lfoPhase -= 2.0 * juce::MathConstants<double>::pi;
+
+    int delaySamples = static_cast<int>(ms * 0.001 * currentSampleRate + modSamples);
+    delaySamples = juce::jlimit(0, bufLen - 1, delaySamples);
+
     const int numCh = juce::jmin(buffer.getNumChannels(), preDelayBuffer.getNumChannels());
 
     for (int ch = 0; ch < numCh; ++ch)
@@ -464,7 +481,6 @@ void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
     preDelayWritePos = (preDelayWritePos + n) % bufLen;
 }
 
-// Reverb con pre-delay: la cola se procesa aparte, así la voz seca no se retrasa
 void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
@@ -562,16 +578,10 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     inputGain.setGainDecibels(apvts.getRawParameterValue("in_gain")->load());
     inputGain.process(ctx);
 
-    // 1. Gate con histéresis
     processDynamics(buffer);
-
-    // 2. De-Esser
     processDeEsser(buffer);
-
-    // 3. Módulo DYNAMICS: drive, color, filtros y mezcla
     processDynModule(buffer);
 
-    // 4. Compresor
     updateCompressor();
     compressor.process(ctx);
 
