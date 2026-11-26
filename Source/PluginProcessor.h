@@ -55,6 +55,8 @@ private:
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processDeEsser(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
+    void processPreDelay(juce::AudioBuffer<float>& buffer);
+    void processReverbWithPreDelay(juce::AudioBuffer<float>& buffer);
     void pushSpectrum(const juce::AudioBuffer<float>& buffer);
     double delayTimeMs() const;
 
@@ -82,6 +84,11 @@ private:
 
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
+
+    // Pre-delay del reverb (hasta 200 ms) y copia de trabajo solo para la cola de reverb
+    juce::AudioBuffer<float> preDelayBuffer;
+    int preDelayWritePos = 0;
+    juce::AudioBuffer<float> revSendBuffer;
 
     // Analizador de espectro (FFT de 2048 muestras)
     juce::dsp::FFT fft { 11 };
