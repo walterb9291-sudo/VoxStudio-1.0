@@ -34,14 +34,25 @@ namespace
     const juce::StringArray kDynPresets   { "Warm Tape", "Clean", "Crunch", "Lo-Fi", "Vintage", "Modern" };
     const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
     const juce::StringArray kEqPresets    { "Warm", "Airy", "Tape", "Flat" };
+    const char* const kCompModeNames[4]   = { "VOX", "BASS", "DRUM", "GLUE" };
 
     struct PV { const char* id; float value; };
+
+    // Cambio de parámetro como lo hace un gesto del usuario (así el host y la interfaz se enteran)
+    void setParamNotify(juce::AudioProcessorValueTreeState& s, const char* id, float value)
+    {
+        if (auto* p = s.getParameter(id))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost(p->convertTo0to1(value));
+            p->endChangeGesture();
+        }
+    }
 
     void applyValues(juce::AudioProcessorValueTreeState& s, std::initializer_list<PV> list)
     {
         for (const auto& pv : list)
-            if (auto* p = s.getParameter(pv.id))
-                p->setValueNotifyingHost(p->convertTo0to1(pv.value));
+            setParamNotify(s, pv.id, pv.value);
     }
 
     void applyEqPreset(juce::AudioProcessorValueTreeState& s, int i)
@@ -75,7 +86,6 @@ namespace
         }
     }
 
-    // Reverb: tipo, tamaño, decay, amortiguación, mezcla, pre-delay, rate y depth de la modulación
     void applyReverbPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
@@ -140,23 +150,48 @@ namespace
         }
     }
 
-    // ---------- Presets globales: una sola selección ajusta las cuatro columnas ----------
-    // eq, rev, dly, dyn: índice del preset de cada columna (-1 = no cambiar la reverb o el delay)
+    // Modos del compresor: umbral, ratio, ataque, liberación y makeup
+    void applyCompMode(juce::AudioProcessorValueTreeState& s, int m)
+    {
+        switch (m)
+        {
+            case 0: applyValues(s, { { "comp_threshold", -20.0f }, { "comp_ratio", 3.0f },
+                                     { "comp_attack", 10.0f }, { "comp_release", 120.0f }, { "comp_makeup", 3.0f } }); break;
+            case 1: applyValues(s, { { "comp_threshold", -22.0f }, { "comp_ratio", 4.0f },
+                                     { "comp_attack", 25.0f }, { "comp_release", 200.0f }, { "comp_makeup", 3.0f } }); break;
+            case 2: applyValues(s, { { "comp_threshold", -16.0f }, { "comp_ratio", 5.0f },
+                                     { "comp_attack", 3.0f }, { "comp_release", 90.0f }, { "comp_makeup", 4.0f } }); break;
+            default: applyValues(s, { { "comp_threshold", -12.0f }, { "comp_ratio", 2.0f },
+                                      { "comp_attack", 30.0f }, { "comp_release", 300.0f }, { "comp_makeup", 2.0f } }); break;
+        }
+    }
+
+    // Presets globales: EQ, reverb (-1 = sin reverb), delay (-1 = sin delay), dynamics, modo del compresor y gate
     struct GlobalPreset
     {
         const char* name;
-        int eq, rev, dly, dyn;
-        float thr, ratio, att, rel, mk, gate;
+        int eq, rev, dly, dyn, mode;
+        float gate;
     };
 
     const GlobalPreset kGlobalPresets[] = {
-        { "Vocal Clean",  3, 3, 0,  1, -20.0f, 3.0f, 10.0f, 120.0f, 3.0f, -50.0f },
-        { "Vocal Bright", 1, 2, 0,  1, -18.0f, 3.5f,  8.0f, 100.0f, 4.0f, -50.0f },
-        { "Podcast",      0, 0, 0,  1, -22.0f, 4.0f, 12.0f, 150.0f, 5.0f, -45.0f },
-        { "Radio",        2, 0, -1, 3, -15.0f, 6.0f,  5.0f,  80.0f, 6.0f, -40.0f },
-        { "Telefono",     2, -1, -1, 3, -12.0f, 8.0f, 3.0f,  60.0f, 8.0f, -35.0f },
+        { "Vocal Clean",  3, 3,  0, 1, 0, -50.0f },
+        { "Vocal Bright", 1, 2,  0, 1, 0, -50.0f },
+        { "Podcast",      0, 0,  0, 1, 1, -45.0f },
+        { "Radio",        2, 0, -1, 3, 2, -40.0f },
+        { "Telefono",     2, -1, -1, 3, 3, -35.0f },
     };
     constexpr int kNumGlobalPresets = (int) (sizeof(kGlobalPresets) / sizeof(kGlobalPresets[0]));
+
+    juce::StringArray makeGlobalNames()
+    {
+        juce::StringArray names;
+        for (int i = 0; i < kNumGlobalPresets; ++i)
+            names.add(kGlobalPresets[i].name);
+        return names;
+    }
+
+    const juce::StringArray kGlobalPresetNames = makeGlobalNames();
 
     void applyGlobalPreset(juce::AudioProcessorValueTreeState& s, int i)
     {
@@ -175,37 +210,8 @@ namespace
             applyValues(s, { { "sfx_delay", 0.0f } });
 
         applyDynPresetValues(s, gp.dyn);
-
-        applyValues(s, { { "comp_threshold", gp.thr }, { "comp_ratio", gp.ratio },
-                         { "comp_attack", gp.att },    { "comp_release", gp.rel },
-                         { "comp_makeup", gp.mk },     { "dyn_gate", gp.gate } });
-    }
-
-    // Muestra la lista de presets globales filtrada por lo escrito en el buscador
-    void showGlobalPresetMenu(juce::TextEditor& box, juce::AudioProcessorValueTreeState& s)
-    {
-        const juce::String query = box.getText().trim().toLowerCase();
-
-        juce::PopupMenu menu;
-        for (int i = 0; i < kNumGlobalPresets; ++i)
-        {
-            const juce::String name = kGlobalPresets[i].name;
-            if (query.isEmpty() || name.toLowerCase().contains(query))
-                menu.addItem(i + 1, name);
-        }
-
-        if (menu.getNumItems() == 0)
-            return;
-
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&box),
-                           [sp = &s, bp = &box](int result)
-                           {
-                               if (result > 0)
-                               {
-                                   applyGlobalPreset(*sp, result - 1);
-                                   bp->setText(kGlobalPresets[result - 1].name, false);
-                               }
-                           });
+        applyCompMode(s, gp.mode);
+        applyValues(s, { { "dyn_gate", gp.gate } });
     }
 
     juce::Rectangle<int> panelRect(int i, int w, int h)
@@ -579,15 +585,18 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     subtitle.setVisible(false);
     producer.setVisible(false);
 
-    // Buscador de presets globales: escribe el nombre y pulsa Enter
-    searchBox.setTextToShowWhenEmpty("Buscar preset...", Neon::muted);
-    searchBox.setColour(juce::TextEditor::backgroundColourId, Neon::panel);
-    searchBox.setColour(juce::TextEditor::textColourId, Neon::text);
-    searchBox.setColour(juce::TextEditor::outlineColourId, Neon::sky.withAlpha(0.6f));
-    searchBox.setColour(juce::TextEditor::focusedOutlineColourId, Neon::sky);
-    searchBox.setFont(juce::Font(juce::FontOptions("Segoe UI", 12.0f, juce::Font::plain)));
-    searchBox.onReturnKey = [this] { showGlobalPresetMenu(searchBox, processor.apvts); };
-    addAndMakeVisible(searchBox);
+    // Presets globales en lista desplegable
+    globalPresetBox.addItemList(kGlobalPresetNames, 1);
+    globalPresetBox.setTextWhenNothingSelected("Presets...");
+    globalPresetBox.setJustificationType(juce::Justification::centred);
+    globalPresetBox.onChange = [this] {
+        const int id = globalPresetBox.getSelectedId();
+        if (id <= 0)
+            return;
+        applyGlobalPreset(processor.apvts, id - 1);
+        syncPresetBoxes(id - 1);
+    };
+    addAndMakeVisible(globalPresetBox);
 
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
     presetBox.setJustificationType(juce::Justification::centred);
@@ -612,6 +621,18 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayPresetBox.setJustificationType(juce::Justification::centredLeft);
     delayPresetBox.onChange = [this] { applyDelayPresetValues(processor.apvts, delayPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(delayPresetBox);
+
+    // Modos del compresor
+    for (int m = 0; m < 4; ++m)
+    {
+        compModeBtn[m].setButtonText(kCompModeNames[m]);
+        compModeBtn[m].setClickingTogglesState(false);
+        compModeBtn[m].onClick = [this, m] {
+            applyCompMode(processor.apvts, m);
+            highlightCompMode(m);
+        };
+        addAndMakeVisible(compModeBtn[m]);
+    }
 
     bypassButton.setClickingTogglesState(true);
     addAndMakeVisible(bypassButton);
@@ -791,6 +812,29 @@ void VoxStudioEditor::setDelayDivision(int index)
 {
     if (auto* p = processor.apvts.getParameter("sfx_delay_div"))
         p->setValueNotifyingHost(p->convertTo0to1((float) index));
+}
+
+// Marca en los combos y botones el preset global elegido (sin volver a aplicar nada)
+void VoxStudioEditor::syncPresetBoxes(int globalIndex)
+{
+    const auto& gp = kGlobalPresets[globalIndex];
+
+    eqPresetBox.setSelectedId(gp.eq + 1, juce::dontSendNotification);
+    dynPresetBox.setSelectedId(gp.dyn + 1, juce::dontSendNotification);
+
+    if (gp.dly >= 0)
+        delayPresetBox.setSelectedId(gp.dly + 1, juce::dontSendNotification);
+
+    if (gp.rev >= 0)
+        presetBox.setSelectedId(gp.rev + 1, juce::dontSendNotification);
+
+    highlightCompMode(gp.mode);
+}
+
+void VoxStudioEditor::highlightCompMode(int mode)
+{
+    for (int m = 0; m < 4; ++m)
+        compModeBtn[m].setToggleState(m == mode, juce::dontSendNotification);
 }
 
 void VoxStudioEditor::setupKnob(Knob& k, const juce::String& paramID, const juce::String& text)
@@ -1093,18 +1137,22 @@ void VoxStudioEditor::resized()
     const auto c2 = panelRect(2, w, h);
     const auto c3 = panelRect(3, w, h);
 
-    searchBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
+    globalPresetBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
 
+    // COMPRESION: VU arriba, botones de modo, umbral, cuatro perillas y caja GATE
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(88);
-    placeKnob(compThreshold, p0.removeFromTop(120), 108);
+    const auto modeRow = cellsOf(p0.removeFromTop(22), 4, 1);
+    for (int m = 0; m < 4; ++m)
+        compModeBtn[m].setBounds(modeRow[(size_t) m].reduced(2, 1));
+    placeKnob(compThreshold, p0.removeFromTop(110), 104);
     p0.removeFromBottom(gateBoxH);
     const auto compCells = cellsOf(p0, 2, 2);
-    placeKnob(compRatio,   compCells[0], 56);
-    placeKnob(compAttack,  compCells[1], 56);
-    placeKnob(compRelease, compCells[2], 56);
-    placeKnob(compMakeup,  compCells[3], 56);
+    placeKnob(compRatio,   compCells[0], 54);
+    placeKnob(compAttack,  compCells[1], 54);
+    placeKnob(compRelease, compCells[2], 54);
+    placeKnob(compMakeup,  compCells[3], 54);
 
     const auto gr = gateBoxRect(w, h).reduced(10, 6).withTrimmedTop(18);
     const auto gateCells = cellsOf(gr, 2, 1);
