@@ -59,13 +59,14 @@ private:
     juce::ComboBox globalPresetBox;
 
     juce::ComboBox presetBox;
-    std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
 
     juce::ComboBox eqPresetBox;
     juce::ComboBox dynPresetBox;
     juce::ComboBox delayPresetBox;
 
     juce::TextButton compModeBtn[4];
+
+    juce::Label bandTitle[VoxStudioProcessor::numEqBands];
 
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
