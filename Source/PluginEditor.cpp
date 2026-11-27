@@ -27,7 +27,7 @@ namespace
     constexpr int headerH  = 74;
     constexpr int panelTop = 88;
     constexpr int footerH  = 72;
-    constexpr int gateBoxH = 110;
+    constexpr int gateBoxH = 100;
 
     const char* const kDivLabels[8] = { "1/1", "1/2", "1/4", "1/8", "1/16", "1/4.", "1/8.", "1/4T" };
 
@@ -35,10 +35,11 @@ namespace
     const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
     const juce::StringArray kEqPresets    { "Warm", "Airy", "Tape", "Flat" };
     const char* const kCompModeNames[4]   = { "VOX", "BASS", "DRUM", "GLUE" };
+    const juce::Colour kBandColours[4]    = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
 
     struct PV { const char* id; float value; };
 
-    // Cambio de parámetro como lo hace un gesto del usuario (así el host y la interfaz se enteran)
+    // Cambio de parámetro como gesto del usuario: el host y la interfaz se enteran
     void setParamNotify(juce::AudioProcessorValueTreeState& s, const char* id, float value)
     {
         if (auto* p = s.getParameter(id))
@@ -86,6 +87,7 @@ namespace
         }
     }
 
+    // Reverb: tipo, tamaño, decay, amortiguación, mezcla, pre-delay, rate y depth
     void applyReverbPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
@@ -454,12 +456,19 @@ namespace
                    juce::Justification::right, false);
     }
 
+    // Perilla metálica: sombra, aro de aluminio con estrías, pista, arco de valor en color,
+    // tapa brillante con reflejo y puntero blanco con sombra
     void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
                         float sliderPos, float startAngle, float endAngle, juce::Colour accent)
     {
         const float angle = startAngle + sliderPos * (endAngle - startAngle);
         const juce::Colour bright = accent.brighter(0.35f);
 
+        // Sombra bajo la perilla
+        g.setColour(juce::Colours::black.withAlpha(0.45f));
+        g.fillEllipse(cx - radius, cy - radius + 3.0f, radius * 2.0f, radius * 2.0f);
+
+        // Marcas de escala
         for (int i = 0; i <= 10; ++i)
         {
             const float t = (float) i / 10.0f;
@@ -471,37 +480,66 @@ namespace
                        cx + r2 * std::sin(a), cy - r2 * std::cos(a), 1.5f);
         }
 
-        const float trackR = radius - 5.0f;
+        // Aro metálico (aluminio claro arriba, oscuro abajo)
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xffb4bccd), cx, cy - radius,
+                                               juce::Colour(0xff1a1e2c), cx, cy + radius, false));
+        g.fillEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
 
+        // Estrías del aro
+        for (int i = 0; i < 36; ++i)
+        {
+            const float a = juce::MathConstants<float>::twoPi * (float) i / 36.0f;
+            g.setColour(juce::Colour(0xff05060a).withAlpha(0.35f));
+            g.drawLine(cx + (radius - 1.5f) * std::sin(a), cy - (radius - 1.5f) * std::cos(a),
+                       cx + (radius - 4.0f) * std::sin(a), cy - (radius - 4.0f) * std::cos(a), 0.8f);
+        }
+
+        // Borde del aro
+        g.setColour(juce::Colour(0xff05060a));
+        g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 1.2f);
+
+        // Pista de fondo
+        const float trackR = radius - 6.0f;
         juce::Path track;
         track.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, endAngle, true);
         g.setColour(Neon::grid);
         g.strokePath(track, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
+        // Arco de valor con brillo
         if (sliderPos > 0.001f)
         {
             juce::Path value;
             value.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, angle, true);
-            g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.25f), cx - trackR, cy,
-                                                   bright.withAlpha(0.25f), cx + trackR, cy, false));
-            g.strokePath(value, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour(accent.withAlpha(0.25f));
+            g.strokePath(value, juce::PathStrokeType(8.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             g.setGradientFill(juce::ColourGradient(accent, cx - trackR, cy, bright, cx + trackR, cy, false));
             g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
+        // Tapa con degradado radial (más clara en el centro)
         const float capR = radius * 0.66f;
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff2a2f45), cx - capR * 0.35f, cy - capR * 0.45f,
-                                               juce::Colour(0xff07080d), cx + capR, cy + capR, true));
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff586078), cx - capR * 0.3f, cy - capR * 0.4f,
+                                               juce::Colour(0xff080a10), cx + capR, cy + capR, true));
         g.fillEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
-        g.setColour(accent.withAlpha(0.35f));
+
+        // Anillo de acabado de la tapa
+        g.setColour(juce::Colour(0xff7d8699).withAlpha(0.6f));
         g.drawEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f, 1.0f);
 
+        // Reflejo brillante sobre la tapa
+        g.setColour(juce::Colours::white.withAlpha(0.18f));
+        g.fillEllipse(cx - capR * 0.62f, cy - capR * 0.78f, capR * 0.7f, capR * 0.42f);
+
+        // Puntero: sombra, luego línea blanca y punto de color en la punta
         const float px0 = cx + capR * 0.15f * std::sin(angle);
         const float py0 = cy - capR * 0.15f * std::cos(angle);
         const float px1 = cx + capR * 0.78f * std::sin(angle);
         const float py1 = cy - capR * 0.78f * std::cos(angle);
-        g.setColour(Neon::text);
-        g.drawLine(juce::Line<float>(px0, py0, px1, py1), 2.5f);
+
+        g.setColour(juce::Colours::black.withAlpha(0.5f));
+        g.drawLine(juce::Line<float>(px0 + 1.0f, py0 + 1.0f, px1 + 1.0f, py1 + 1.0f), 3.2f);
+        g.setColour(juce::Colours::white);
+        g.drawLine(juce::Line<float>(px0, py0, px1, py1), 2.6f);
         g.setColour(bright);
         g.fillEllipse(px1 - 3.0f, py1 - 3.0f, 6.0f, 6.0f);
     }
@@ -598,11 +636,15 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     addAndMakeVisible(globalPresetBox);
 
+    // Reverb: el tipo cambia y se aplican sus valores (las perillas se mueven)
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
     presetBox.setJustificationType(juce::Justification::centred);
+    presetBox.setSelectedId((int) processor.apvts.getRawParameterValue("rev_preset")->load() + 1,
+                            juce::dontSendNotification);
+    presetBox.onChange = [this] {
+        applyReverbPresetValues(processor.apvts, presetBox.getSelectedId() - 1);
+    };
     addAndMakeVisible(presetBox);
-    presetAttachment = std::make_unique<juce::ComboBoxParameterAttachment>(
-        *processor.apvts.getParameter("rev_preset"), presetBox, nullptr);
 
     eqPresetBox.addItemList(kEqPresets, 1);
     eqPresetBox.setSelectedId(1, juce::dontSendNotification);
@@ -677,10 +719,16 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     gateHyst.slider.textFromValueFunction = [](double v) { return juce::String(v, 1) + " dB"; };
     tint(gateHyst, Neon::sky);
 
-    const juce::Colour bandCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const juce::String n = "eq" + juce::String(b + 1) + "_";
+
+        bandTitle[b].setText("BANDA " + juce::String(b + 1), juce::dontSendNotification);
+        bandTitle[b].setFont(juce::FontOptions(8.5f, juce::Font::bold));
+        bandTitle[b].setColour(juce::Label::textColourId, kBandColours[b]);
+        bandTitle[b].setJustificationType(juce::Justification::centred);
+        addAndMakeVisible(bandTitle[b]);
+
         setupKnob(eqFreq[b], n + "freq", "FREQ");
         eqFreq[b].slider.textFromValueFunction = [](double v) {
             return v >= 1000.0 ? juce::String(v / 1000.0, 1) + "k" : juce::String((int) v) + " Hz";
@@ -693,8 +741,8 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         eqQ[b].slider.setVisible(false);
         eqQ[b].label.setVisible(false);
 
-        tint(eqFreq[b], bandCol[b]);
-        tint(eqGain[b], bandCol[b]);
+        tint(eqFreq[b], kBandColours[b]);
+        tint(eqGain[b], kBandColours[b]);
     }
 
     setupKnob(sfxDrive, "sfx_drive", "DRIVE");
@@ -814,7 +862,7 @@ void VoxStudioEditor::setDelayDivision(int index)
         p->setValueNotifyingHost(p->convertTo0to1((float) index));
 }
 
-// Marca en los combos y botones el preset global elegido (sin volver a aplicar nada)
+// Marca en combos y botones el preset global elegido, sin volver a aplicar valores
 void VoxStudioEditor::syncPresetBoxes(int globalIndex)
 {
     const auto& gp = kGlobalPresets[globalIndex];
@@ -880,6 +928,11 @@ void VoxStudioEditor::timerCallback()
     const int activeDiv = (int) processor.apvts.getRawParameterValue("sfx_delay_div")->load();
     if ((int) std::round(delayDiv.slider.getValue()) != activeDiv)
         delayDiv.slider.setValue(activeDiv, juce::dontSendNotification);
+
+    // Mantiene el combo de reverb igual al parámetro (por si se cambia desde el host)
+    const int revIdx = (int) processor.apvts.getRawParameterValue("rev_preset")->load();
+    if (presetBox.getSelectedId() != revIdx + 1)
+        presetBox.setSelectedId(revIdx + 1, juce::dontSendNotification);
 
     repaint();
 }
@@ -1107,12 +1160,11 @@ void VoxStudioEditor::paint(juce::Graphics& g)
                                            Neon::violet, area.getRight(), 0.0f, false));
     g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    const juce::Colour nodeCol[4] = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
         const auto p = nodePosition(b);
         const float gain = processor.apvts.getRawParameterValue("eq" + juce::String(b + 1) + "_gain")->load();
-        const juce::Colour c = nodeCol[b];
+        const juce::Colour c = kBandColours[b];
         const float alpha = std::abs(gain) < 0.05f ? 0.35f : 1.0f;
         g.setColour(c.withAlpha(0.25f * alpha));
         g.fillEllipse(p.x - 9.0f, p.y - 9.0f, 18.0f, 18.0f);
@@ -1140,36 +1192,40 @@ void VoxStudioEditor::resized()
     globalPresetBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
 
-    // COMPRESION: VU arriba, botones de modo, umbral, cuatro perillas y caja GATE
+    // COMPRESION: VU arriba, modos, umbral (96), perillas de 62 px y caja GATE
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(88);
     const auto modeRow = cellsOf(p0.removeFromTop(22), 4, 1);
     for (int m = 0; m < 4; ++m)
         compModeBtn[m].setBounds(modeRow[(size_t) m].reduced(2, 1));
-    placeKnob(compThreshold, p0.removeFromTop(110), 104);
+    placeKnob(compThreshold, p0.removeFromTop(96), 84);
     p0.removeFromBottom(gateBoxH);
     const auto compCells = cellsOf(p0, 2, 2);
-    placeKnob(compRatio,   compCells[0], 54);
-    placeKnob(compAttack,  compCells[1], 54);
-    placeKnob(compRelease, compCells[2], 54);
-    placeKnob(compMakeup,  compCells[3], 54);
+    placeKnob(compRatio,   compCells[0], 62);
+    placeKnob(compAttack,  compCells[1], 62);
+    placeKnob(compRelease, compCells[2], 62);
+    placeKnob(compMakeup,  compCells[3], 62);
 
     const auto gr = gateBoxRect(w, h).reduced(10, 6).withTrimmedTop(18);
     const auto gateCells = cellsOf(gr, 2, 1);
-    placeKnob(dynGate,  gateCells[0], 56);
-    placeKnob(gateHyst, gateCells[1], 56);
+    placeKnob(dynGate,  gateCells[0], 50);
+    placeKnob(gateHyst, gateCells[1], 50);
 
     eqPresetBox.setBounds(eqPresetRect(w, h));
 
+    // EQ: título BANDA n arriba de cada columna, luego FREQ y GAIN
     const auto bands = eqBandsArea(w, h);
     const auto bandCols = cellsOf(bands, 4, 1);
     for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
     {
-        const auto rows = cellsOf(bandCols[(size_t) b], 1, 2);
-        placeKnob(eqFreq[b], rows[0], 56);
-        placeKnob(eqGain[b], rows[1], 56);
+        auto col = bandCols[(size_t) b];
+        bandTitle[b].setBounds(col.removeFromTop(16));
+        const auto rows = cellsOf(col, 1, 2);
+        placeKnob(eqFreq[b], rows[0], 52);
+        placeKnob(eqGain[b], rows[1], 52);
     }
 
+    // REVERB · DELAY: drive, tipo de reverb, reverb (4 perillas), modulación, preset de delay y delay
     auto p2 = innerRect(panelRect(2, w, h));
     placeKnob(sfxDrive, p2.removeFromTop(88), 80);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
@@ -1199,6 +1255,7 @@ void VoxStudioEditor::resized()
     placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
     placeKnob(delayDry, dlyBot[2].reduced(2, 0), 62);
 
+    // DYNAMICS
     auto p3 = innerRect(panelRect(3, w, h));
     dynPresetBox.setBounds(p3.removeFromTop(30).reduced(4, 4));
     p3.removeFromTop(8);
