@@ -42,6 +42,8 @@ private:
     void setupKnob(Knob& k, const juce::String& paramID, const juce::String& text);
     void setupPending(Knob& k, const juce::String& text);
     void setDelayDivision(int index);
+    void syncPresetBoxes(int globalIndex);
+    void highlightCompMode(int mode);
     juce::Rectangle<float> eqArea() const;
     juce::Point<float> nodePosition(int band) const;
     void setBandFromPoint(int band, juce::Point<float> p);
@@ -54,7 +56,7 @@ private:
     juce::Label subtitle;
     juce::Label producer;
 
-    juce::TextEditor searchBox;
+    juce::ComboBox globalPresetBox;
 
     juce::ComboBox presetBox;
     std::unique_ptr<juce::ComboBoxParameterAttachment> presetAttachment;
@@ -62,6 +64,8 @@ private:
     juce::ComboBox eqPresetBox;
     juce::ComboBox dynPresetBox;
     juce::ComboBox delayPresetBox;
+
+    juce::TextButton compModeBtn[4];
 
     juce::TextButton bypassButton { "BYPASS" };
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
