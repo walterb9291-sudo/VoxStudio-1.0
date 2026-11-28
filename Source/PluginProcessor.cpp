@@ -4,9 +4,10 @@
 
 namespace
 {
-    const float kBaseMs[8] = { 29.7f, 37.1f, 41.1f, 43.7f, 47.9f, 53.3f, 59.9f, 67.7f };
-    const float kPresetScale[5]      = { 1.0f, 1.4f, 0.7f, 0.9f, 1.2f };
-    const float kPresetDampOffset[5] = { 0.0f, 0.05f, -0.1f, 0.05f, -0.2f };
+    const float kBaseMs[8]   = { 29.7f, 37.1f, 41.1f, 43.7f, 47.9f, 53.3f, 59.9f, 67.7f };
+    const float kEarlyMs[8]  = { 6.1f, 9.7f, 14.3f, 19.9f, 26.1f, 33.7f, 41.3f, 49.9f };
+    const float kEarlyGain[8] = { 0.9f, 0.8f, 0.75f, 0.6f, 0.55f, 0.4f, 0.35f, 0.25f };
+    const float kApSec[4]    = { 0.0050f, 0.0037f, 0.0113f, 0.0089f };
 
     void hadamard8(std::array<float, 8>& v)
     {
@@ -24,26 +25,26 @@ namespace
             x *= 0.35355339f;
     }
 
-    // Saturación con tres curvas: Suave (tanh simétrica), Cálida (asimétrica, con armónicos pares),
-    // Dura (recorte más agresivo)
-    float shapeDist(float x, float drive, int type)
+    // Distorsión con tres curvas: Suave (tanh con sesgo), Cálida (sesgo y más armónicos pares), Dura (recorte)
+    float shapeDist(float x, float amount, int type, float bias)
     {
-        const float k = 1.0f + drive * 12.0f;
-        switch (type)
+        float k = 1.0f + amount * 12.0f;
+        float b = bias;
+
+        if (type == 1)
         {
-            case 1:
-            {
-                const float y = std::tanh(x * k * 0.8f + 0.25f) - std::tanh(0.25f);
-                return y / (1.0f - std::tanh(0.25f));
-            }
-            case 2:
-            {
-                const float y = juce::jlimit(-1.0f, 1.0f, x * k * 1.6f);
-                return y * 0.7f;
-            }
-            default:
-                return std::tanh(x * k) / std::tanh(k);
+            b += 0.25f;
+            k *= 0.8f;
         }
+        else if (type == 2)
+        {
+            k *= 1.6f;
+            const float y = juce::jlimit(-1.0f, 1.0f, x * k + b) - juce::jlimit(-1.0f, 1.0f, b);
+            return y * 0.8f;
+        }
+
+        const float norm = std::tanh(k + b) - std::tanh(b) + 1.0e-6f;
+        return (std::tanh(x * k + b) - std::tanh(b)) / norm;
     }
 }
 
@@ -86,12 +87,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_focus", "Focus",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_drive", "Dyn Drive",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("dyn_dist_type", "Dist Type",
-        distTypeNames, 0));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_dist_mix", "Dist Mix",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_color", "Color",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_hp", "HP Freq",
@@ -100,6 +95,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
         juce::NormalisableRange<float>(2000.0f, 20000.0f, 1.0f, 0.4f), 20000.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_mix", "Dyn Mix",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 1.0f));
+
+    // Distorsión
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_drive", "Dyn Drive",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>("dyn_dist_type", "Dist Type",
+        distTypeNames, 0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_dist_mix", "Dist Mix",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_dist_tone", "Dist Tone",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_dist_bias", "Dist Bias",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("dyn_dist_out", "Dist Out",
+        juce::NormalisableRange<float>(-12.0f, 6.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("comp_threshold", "Threshold",
         juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -18.0f));
@@ -124,6 +133,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
             juce::NormalisableRange<float>(0.1f, 10.0f, 0.01f, 0.5f), 1.0f));
     }
 
+    // Reverb
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_room", "Room Size",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_decay", "Decay",
@@ -135,10 +145,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout VoxStudioProcessor::createLa
     params.push_back(std::make_unique<juce::AudioParameterInt>("rev_preset", "Preset", 0, 4, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_pre", "Pre-Delay",
         juce::NormalisableRange<float>(0.0f, 200.0f, 0.1f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_diff", "Diffusion",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.6f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("rev_early", "Early",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.3f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("mod_rate", "Mod Rate",
         juce::NormalisableRange<float>(0.05f, 5.0f, 0.01f, 0.5f), 0.8f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("mod_depth", "Mod Depth",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.35f));
+
+    // Saturador
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("sat_drive", "Sat Drive",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("sat_warm", "Sat Warm",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("sat_tone", "Sat Tone",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("sat_out", "Sat Out",
+        juce::NormalisableRange<float>(-12.0f, 6.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("sfx_drive", "Drive",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
@@ -182,10 +206,13 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dynDryBuffer.setSize(2, samplesPerBlock);
     dynDryBuffer.clear();
 
+    compInBuffer.setSize(2, samplesPerBlock);
+    compInBuffer.clear();
+    compEnvDb = 0.0f;
+
     sideBuffer.setSize(2, samplesPerBlock);
     sideBuffer.clear();
     deEsserEnv = 0.0f;
-    compEnvDb = -100.0f;
 
     const int maxDelay = static_cast<int>(sampleRate * 4.0) + 1;
     delayBuffer.setSize(2, maxDelay);
@@ -205,8 +232,20 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         line.assign((size_t) lineMax, 0.0f);
     fdnWrite.fill(0);
     fdnDamp.fill(0.0f);
+
+    for (int k = 0; k < 4; ++k)
+        apBuf[(size_t) k].assign((size_t) juce::jmax(4, (int) (kApSec[k] * sampleRate)), 0.0f);
+    apIdx.fill(0);
+
+    earlyBuf.assign((size_t) (sampleRate * 0.12) + 16, 0.0f);
+    earlyIdx = 0;
+
     reverbHpState = { 0.0f, 0.0f };
     lfoPhaseRev = 0.0;
+
+    distToneState[0] = distToneState[1] = 0.0f;
+    satLpState[0] = satLpState[1] = 0.0f;
+    satToneState[0] = satToneState[1] = 0.0f;
 
     gateEnv = 0.0f;
     gateGainSm = 0.0f;
@@ -214,7 +253,6 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     fftFill = 0;
 
-    applyReverbPreset(static_cast<int>(apvts.getRawParameterValue("rev_preset")->load()));
     updateEq();
 }
 
@@ -224,22 +262,12 @@ bool VoxStudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
         && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
-void VoxStudioProcessor::applyReverbPreset(int index)
-{
-    reverbPresetIdx = juce::jlimit(0, 4, index);
-}
-
 void VoxStudioProcessor::updateCompressor()
 {
     compressor.setThreshold(apvts.getRawParameterValue("comp_threshold")->load());
     compressor.setRatio(apvts.getRawParameterValue("comp_ratio")->load());
     compressor.setAttack(apvts.getRawParameterValue("comp_attack")->load());
     compressor.setRelease(apvts.getRawParameterValue("comp_release")->load());
-}
-
-void VoxStudioProcessor::updateReverb()
-{
-    applyReverbPreset(static_cast<int>(apvts.getRawParameterValue("rev_preset")->load()));
 }
 
 void VoxStudioProcessor::updateEq()
@@ -368,7 +396,7 @@ void VoxStudioProcessor::processDeEsser(juce::AudioBuffer<float>& buffer)
     }
 }
 
-// Módulo DYNAMICS: drive, distorsión con tipos (con su mezcla), color, filtros y mezcla general
+// Módulo DYNAMICS: drive, distorsión (tipo, tono, sesgo, salida y mezcla), color, filtros y mezcla general
 void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
@@ -379,11 +407,13 @@ void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
     const float drive    = apvts.getRawParameterValue("dyn_drive")->load();
     const float distMix  = apvts.getRawParameterValue("dyn_dist_mix")->load();
     const int   distType = (int) apvts.getRawParameterValue("dyn_dist_type")->load();
+    const float distTone = apvts.getRawParameterValue("dyn_dist_tone")->load();
+    const float distBias = apvts.getRawParameterValue("dyn_dist_bias")->load();
+    const float distOut  = juce::Decibels::decibelsToGain(apvts.getRawParameterValue("dyn_dist_out")->load());
 
     for (int ch = 0; ch < 2; ++ch)
         dynDryBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
 
-    // DRIVE: saturación suave (la misma curva de siempre)
     if (drive > 0.0f)
     {
         const float k    = 1.0f + drive * 9.0f;
@@ -396,17 +426,20 @@ void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
         }
     }
 
-    // DIST: distorsión con el tipo elegido, mezclada con la señal sin distorsionar
-    if (distMix > 0.0f && drive > 0.0f)
+    if (distMix > 0.0f)
     {
+        const float amount = juce::jmax(drive, 0.3f);
+        const float a = juce::jmap(distTone, 0.0f, 1.0f, 0.15f, 0.95f);
+
         for (int ch = 0; ch < 2; ++ch)
         {
             auto* d = buffer.getWritePointer(ch);
             for (int i = 0; i < n; ++i)
             {
                 const float clean = d[i];
-                const float dist  = shapeDist(clean, drive, distType);
-                d[i] = clean * (1.0f - distMix) + dist * distMix;
+                const float dist  = shapeDist(clean, amount, distType, distBias * 0.6f);
+                distToneState[ch] += a * (dist - distToneState[ch]);
+                d[i] = clean * (1.0f - distMix) + distToneState[ch] * distOut * distMix;
             }
         }
     }
@@ -422,6 +455,48 @@ void VoxStudioProcessor::processDynModule(juce::AudioBuffer<float>& buffer)
     {
         buffer.applyGain(ch, 0, n, mix);
         buffer.addFrom(ch, 0, dynDryBuffer, ch, 0, n, 1.0f - mix);
+    }
+}
+
+// Saturador: sesgo asimétrico (armónicos pares), calidez de graves y balance de agudos
+void VoxStudioProcessor::processSaturator(juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    if (n == 0)
+        return;
+
+    const float drive = apvts.getRawParameterValue("sat_drive")->load();
+    const float warm  = apvts.getRawParameterValue("sat_warm")->load();
+    const float tone  = apvts.getRawParameterValue("sat_tone")->load();
+    const float outDb = apvts.getRawParameterValue("sat_out")->load();
+
+    if (drive <= 0.001f && warm <= 0.001f && std::abs(tone - 0.5f) < 0.001f && std::abs(outDb) < 0.001f)
+        return;
+
+    const bool shapeOn = (drive > 0.001f || warm > 0.001f);
+    const float outLin = juce::Decibels::decibelsToGain(outDb);
+    const float k      = 1.0f + drive * 6.0f;
+    const float bias   = warm * 0.35f;
+    const float tanhB  = std::tanh(bias);
+    const float norm   = std::tanh(k + bias) - tanhB + 1.0e-6f;
+
+    for (int ch = 0; ch < juce::jmin(2, buffer.getNumChannels()); ++ch)
+    {
+        auto* d = buffer.getWritePointer(ch);
+        for (int i = 0; i < n; ++i)
+        {
+            const float x = d[i];
+            float y = shapeOn ? (std::tanh(k * x + bias) - tanhB) / norm : x;
+
+            satLpState[ch] += 0.12f * (y - satLpState[ch]);
+            y += warm * 0.5f * satLpState[ch];
+
+            satToneState[ch] += 0.2f * (y - satToneState[ch]);
+            const float highs = y - satToneState[ch];
+            y = satToneState[ch] + highs * (0.5f + tone);
+
+            d[i] = y * outLin;
+        }
     }
 }
 
@@ -544,6 +619,7 @@ void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
     preDelayWritePos = (preDelayWritePos + n) % bufLen;
 }
 
+// Reverb: difusión (4 filtros paso todo), reflexiones tempranas y red de 8 líneas con Hadamard
 void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
@@ -556,11 +632,12 @@ void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
     const float damp  = apvts.getRawParameterValue("rev_damp")->load();
     const float depth = apvts.getRawParameterValue("mod_depth")->load();
     const float rate  = apvts.getRawParameterValue("mod_rate")->load();
+    const float diff  = apvts.getRawParameterValue("rev_diff")->load();
+    const float early = apvts.getRawParameterValue("rev_early")->load();
 
-    const int pIdx = juce::jlimit(0, 4, reverbPresetIdx);
-    const float scale = (0.5f + room) * kPresetScale[pIdx];
-    const float dampA = juce::jmap(juce::jlimit(0.0f, 1.0f, damp + kPresetDampOffset[pIdx]),
-                                   0.0f, 1.0f, 0.9f, 0.12f);
+    const float scale = 0.6f + room * 0.9f;
+    const float dampA = juce::jmap(juce::jlimit(0.0f, 1.0f, damp), 0.0f, 1.0f, 0.9f, 0.12f);
+    const float apG   = 0.35f + 0.4f * diff;
 
     std::array<float, kFdnLines> lenS {};
     std::array<float, kFdnLines> gains {};
@@ -572,31 +649,63 @@ void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
         gains[ui] = std::pow(0.001f, lenS[ui] / (decay * sr));
     }
 
-    const float modAmp = depth * 0.0015f * sr;
-    const float lfoInc = 2.0f * juce::MathConstants<float>::pi * rate / sr;
-    const float twoPi  = 2.0f * juce::MathConstants<float>::pi;
-    const float hpA    = std::exp(-2.0f * juce::MathConstants<float>::pi * 150.0f / sr);
+    const float modAmp  = depth * 0.0015f * sr;
+    const float lfoInc  = 2.0f * juce::MathConstants<float>::pi * rate / sr;
+    const double twoPi  = 2.0 * juce::MathConstants<double>::pi;
+    const float hpA     = std::exp(-2.0f * juce::MathConstants<float>::pi * 150.0f / sr);
+    const int earlySize = (int) earlyBuf.size();
 
     float* L = buffer.getWritePointer(0);
     float* R = buffer.getWritePointer(1);
 
     for (int s = 0; s < n; ++s)
     {
-        const float inL = L[s];
-        const float inR = R[s];
+        const float x = 0.5f * (L[s] + R[s]);
 
-        reverbHpState[0] = hpA * reverbHpState[0] + (1.0f - hpA) * inL;
-        reverbHpState[1] = hpA * reverbHpState[1] + (1.0f - hpA) * inR;
-        const float hpL = inL - reverbHpState[0];
-        const float hpR = inR - reverbHpState[1];
+        reverbHpState[0] = hpA * reverbHpState[0] + (1.0f - hpA) * x;
+        const float hp = x - reverbHpState[0];
 
+        // Difusión
+        float dd = hp;
+        for (int k = 0; k < 4; ++k)
+        {
+            auto& b = apBuf[(size_t) k];
+            const int len = (int) b.size();
+            int& idx = apIdx[(size_t) k];
+            const float delayed = b[(size_t) idx];
+            const float out = -apG * dd + delayed;
+            b[(size_t) idx] = dd + apG * out;
+            idx = (idx + 1) % len;
+            dd = out;
+        }
+        const float fdnIn = hp + (dd - hp) * diff;
+
+        // Reflexiones tempranas
+        earlyBuf[(size_t) earlyIdx] = hp;
+        float eL = 0.0f;
+        float eR = 0.0f;
+        for (int t = 0; t < 8; ++t)
+        {
+            const int dl = (int) (kEarlyMs[t] * 0.001f * sr * scale);
+            int r = earlyIdx - dl;
+            if (r < 0)
+                r += earlySize;
+            const float v = earlyBuf[(size_t) r] * kEarlyGain[t];
+            if ((t & 1) == 0)
+                eL += v;
+            else
+                eR += v;
+        }
+        earlyIdx = (earlyIdx + 1) % earlySize;
+
+        // Red de 8 líneas
         std::array<float, kFdnLines> taps {};
         for (int i = 0; i < kFdnLines; ++i)
         {
             const size_t ui = (size_t) i;
             const int size = (int) fdnBuf[ui].size();
 
-            const float mod = modAmp * std::sin(lfoPhaseRev + 0.9f * (float) i);
+            const float mod = static_cast<float>(modAmp * std::sin(lfoPhaseRev + 0.9 * (double) i));
             const float d = juce::jlimit(2.0f, (float) size - 4.0f, lenS[ui] + mod);
             const int di = (int) d;
             const float frac = d - (float) di;
@@ -624,20 +733,20 @@ void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
         for (int i = 0; i < kFdnLines; ++i)
         {
             const size_t ui = (size_t) i;
-            const float in = (i % 2 == 0) ? hpL : hpR;
             const int size = (int) fdnBuf[ui].size();
+            const float in = ((i & 1) == 0) ? fdnIn : -fdnIn;
 
-            fdnBuf[ui][(size_t) fdnWrite[ui]] = in * 0.3f + mixed[ui] * gains[ui];
+            fdnBuf[ui][(size_t) fdnWrite[ui]] = in * 0.25f + mixed[ui] * gains[ui];
             fdnWrite[ui] = (fdnWrite[ui] + 1) % size;
 
-            if (i % 2 == 0)
+            if ((i & 1) == 0)
                 wetL += taps[ui];
             else
                 wetR += taps[ui];
         }
 
-        L[s] = wetL * 0.3f;
-        R[s] = wetR * 0.3f;
+        L[s] = wetL * 0.3f + eL * early;
+        R[s] = wetR * 0.3f + eR * early;
 
         lfoPhaseRev += lfoInc;
         if (lfoPhaseRev > twoPi)
@@ -648,12 +757,7 @@ void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
 void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
-    if (buffer.getNumChannels() < 2 || n == 0)
-        return;
-
-    updateReverb();
-
-    if (revSendBuffer.getNumSamples() < n)
+    if (buffer.getNumChannels() < 2 || n == 0 || revSendBuffer.getNumSamples() < n)
         return;
 
     const float mix = apvts.getRawParameterValue("rev_mix")->load();
@@ -719,11 +823,12 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (int i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    inputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
+    const int n = buffer.getNumSamples();
+    inputLevel.store(buffer.getMagnitude(0, n));
 
     if (apvts.getRawParameterValue("bypass")->load() > 0.5f)
     {
-        outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
+        outputLevel.store(buffer.getMagnitude(0, n));
         gainReductionDb.store(0.0f);
         gateOpen.store(false);
         return;
@@ -739,30 +844,26 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     processDeEsser(buffer);
     processDynModule(buffer);
 
-    // Compresor: se mide la reducción real comparando la entrada y la salida del compresor
+    // Compresor y reducción real: se compara el RMS de entrada y salida del compresor
     updateCompressor();
-    const int n = buffer.getNumSamples();
-    juce::AudioBuffer<float> compIn(buffer);
+    const bool canMeter = compInBuffer.getNumSamples() >= n && buffer.getNumChannels() >= 2;
+    if (canMeter)
+        for (int ch = 0; ch < 2; ++ch)
+            compInBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
+
     compressor.process(ctx);
 
+    if (canMeter)
     {
-        const float thr   = apvts.getRawParameterValue("comp_threshold")->load();
-        const float ratio = apvts.getRawParameterValue("comp_ratio")->load();
-        const float rel   = apvts.getRawParameterValue("comp_release")->load();
+        const float inR  = 0.5f * (compInBuffer.getRMSLevel(0, 0, n) + compInBuffer.getRMSLevel(1, 0, n));
+        const float outR = 0.5f * (buffer.getRMSLevel(0, 0, n) + buffer.getRMSLevel(1, 0, n));
 
-        // Nivel de entrada y de salida del compresor en dB (pico por bloque)
-        const float inDb  = juce::Decibels::gainToDecibels(juce::jmax(1.0e-5f, compIn.getMagnitude(0, n)), -100.0f);
-        const float outDb = juce::Decibels::gainToDecibels(juce::jmax(1.0e-5f, buffer.getMagnitude(0, n)), -100.0f);
+        float redDb = (inR > 1.0e-5f && outR > 1.0e-5f) ? 20.0f * std::log10(inR / outR) : 0.0f;
+        redDb = juce::jlimit(0.0f, 40.0f, redDb);
 
-        // Reducción ideal con esta curva: por encima del umbral, la salida sube (1/ratio) de lo que sube la entrada
-        const float over       = juce::jmax(0.0f, inDb - thr);
-        const float idealRed   = over * (1.0f - 1.0f / ratio);
-        const float measured   = juce::jmax(0.0f, inDb - outDb);
-        const float target     = juce::jmin(measured, idealRed + 0.0f) + 0.0f;
-
-        // Balística de caída: sube rápido y baja con el RELEASE
+        const float rel  = apvts.getRawParameterValue("comp_release")->load();
         const float relC = std::exp(-(float) n / (0.001f * juce::jmax(10.0f, rel) * (float) currentSampleRate));
-        compEnvDb = target > compEnvDb ? target : compEnvDb * relC + target * (1.0f - relC);
+        compEnvDb = redDb > compEnvDb ? redDb : compEnvDb * relC + redDb * (1.0f - relC);
 
         gainReductionDb.store(compEnvDb);
     }
@@ -774,6 +875,8 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (int b = 0; b < numEqBands; ++b)
         eqBands[(size_t) b].process(ctx);
 
+    processSaturator(buffer);
+
     processSFX(buffer);
 
     processReverbWithPreDelay(buffer);
@@ -782,7 +885,7 @@ void VoxStudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     outputGain.process(ctx);
 
     pushSpectrum(buffer);
-    outputLevel.store(buffer.getMagnitude(0, buffer.getNumSamples()));
+    outputLevel.store(buffer.getMagnitude(0, n));
 }
 
 juce::AudioProcessorEditor* VoxStudioProcessor::createEditor()
