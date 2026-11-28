@@ -34,12 +34,13 @@ namespace
     const juce::StringArray kDynPresets   { "Warm Tape", "Clean", "Crunch", "Lo-Fi", "Vintage", "Modern" };
     const juce::StringArray kDelayPresets { "Slapback", "Dotted Echo", "Ping Pong", "Tape Echo", "Ambient" };
     const juce::StringArray kEqPresets    { "Warm", "Airy", "Tape", "Flat" };
+    const juce::StringArray kDistTypes    { "Suave", "Calida", "Dura" };
     const char* const kCompModeNames[4]   = { "VOX", "BASS", "DRUM", "GLUE" };
-    const juce::Colour kBandColours[4]    = { Neon::blue, Neon::mint, Neon::amber, Neon::purple };
+    const juce::Colour kBandColours[6]    = { Neon::blue, Neon::mint, Neon::amber, Neon::purple,
+                                              Neon::pink, Neon::sky };
 
     struct PV { const char* id; float value; };
 
-    // Cambio de parámetro como gesto del usuario: el host y la interfaz se enteran
     void setParamNotify(juce::AudioProcessorValueTreeState& s, const char* id, float value)
     {
         if (auto* p = s.getParameter(id))
@@ -87,7 +88,6 @@ namespace
         }
     }
 
-    // Reverb: tipo, tamaño, decay, amortiguación, mezcla, pre-delay, rate y depth
     void applyReverbPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
@@ -131,28 +131,27 @@ namespace
     {
         switch (i)
         {
-            case 0: applyValues(s, { { "dyn_drive", 0.25f }, { "dyn_color", 0.45f }, { "dyn_hp", 30.0f },
-                                     { "dyn_lp", 16000.0f }, { "dyn_deess", 0.20f }, { "dyn_focus", 0.50f },
-                                     { "dyn_mix", 1.0f } }); break;
-            case 1: applyValues(s, { { "dyn_drive", 0.0f }, { "dyn_color", 0.50f }, { "dyn_hp", 60.0f },
-                                     { "dyn_lp", 20000.0f }, { "dyn_deess", 0.10f }, { "dyn_focus", 0.50f },
-                                     { "dyn_mix", 1.0f } }); break;
-            case 2: applyValues(s, { { "dyn_drive", 0.50f }, { "dyn_color", 0.55f }, { "dyn_hp", 80.0f },
-                                     { "dyn_lp", 12000.0f }, { "dyn_deess", 0.30f }, { "dyn_focus", 0.55f },
-                                     { "dyn_mix", 1.0f } }); break;
-            case 3: applyValues(s, { { "dyn_drive", 0.60f }, { "dyn_color", 0.20f }, { "dyn_hp", 180.0f },
-                                     { "dyn_lp", 4500.0f }, { "dyn_deess", 0.0f }, { "dyn_focus", 0.50f },
-                                     { "dyn_mix", 0.9f } }); break;
-            case 4: applyValues(s, { { "dyn_drive", 0.35f }, { "dyn_color", 0.40f }, { "dyn_hp", 50.0f },
-                                     { "dyn_lp", 10000.0f }, { "dyn_deess", 0.25f }, { "dyn_focus", 0.45f },
-                                     { "dyn_mix", 1.0f } }); break;
-            default: applyValues(s, { { "dyn_drive", 0.15f }, { "dyn_color", 0.60f }, { "dyn_hp", 40.0f },
-                                      { "dyn_lp", 20000.0f }, { "dyn_deess", 0.35f }, { "dyn_focus", 0.60f },
-                                      { "dyn_mix", 1.0f } }); break;
+            case 0: applyValues(s, { { "dyn_drive", 0.25f }, { "dyn_dist_mix", 0.0f }, { "dyn_color", 0.45f },
+                                     { "dyn_hp", 30.0f }, { "dyn_lp", 16000.0f }, { "dyn_deess", 0.20f },
+                                     { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
+            case 1: applyValues(s, { { "dyn_drive", 0.0f }, { "dyn_dist_mix", 0.0f }, { "dyn_color", 0.50f },
+                                     { "dyn_hp", 60.0f }, { "dyn_lp", 20000.0f }, { "dyn_deess", 0.10f },
+                                     { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
+            case 2: applyValues(s, { { "dyn_drive", 0.50f }, { "dyn_dist_mix", 0.30f }, { "dyn_color", 0.55f },
+                                     { "dyn_hp", 80.0f }, { "dyn_lp", 12000.0f }, { "dyn_deess", 0.30f },
+                                     { "dyn_focus", 0.55f }, { "dyn_mix", 1.0f } }); break;
+            case 3: applyValues(s, { { "dyn_drive", 0.60f }, { "dyn_dist_mix", 0.50f }, { "dyn_color", 0.20f },
+                                     { "dyn_hp", 180.0f }, { "dyn_lp", 4500.0f }, { "dyn_deess", 0.0f },
+                                     { "dyn_focus", 0.50f }, { "dyn_mix", 0.9f } }); break;
+            case 4: applyValues(s, { { "dyn_drive", 0.35f }, { "dyn_dist_mix", 0.20f }, { "dyn_color", 0.40f },
+                                     { "dyn_hp", 50.0f }, { "dyn_lp", 10000.0f }, { "dyn_deess", 0.25f },
+                                     { "dyn_focus", 0.45f }, { "dyn_mix", 1.0f } }); break;
+            default: applyValues(s, { { "dyn_drive", 0.15f }, { "dyn_dist_mix", 0.10f }, { "dyn_color", 0.60f },
+                                      { "dyn_hp", 40.0f }, { "dyn_lp", 20000.0f }, { "dyn_deess", 0.35f },
+                                      { "dyn_focus", 0.60f }, { "dyn_mix", 1.0f } }); break;
         }
     }
 
-    // Modos del compresor: umbral, ratio, ataque, liberación y makeup
     void applyCompMode(juce::AudioProcessorValueTreeState& s, int m)
     {
         switch (m)
@@ -168,7 +167,6 @@ namespace
         }
     }
 
-    // Presets globales: EQ, reverb (-1 = sin reverb), delay (-1 = sin delay), dynamics, modo del compresor y gate
     struct GlobalPreset
     {
         const char* name;
@@ -409,6 +407,7 @@ namespace
         }
     }
 
+    // VU grande con la reducción real del compresor (en dB)
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
     {
         g.setColour(Neon::bg);
@@ -456,19 +455,15 @@ namespace
                    juce::Justification::right, false);
     }
 
-    // Perilla metálica: sombra, aro de aluminio con estrías, pista, arco de valor en color,
-    // tapa brillante con reflejo y puntero blanco con sombra
     void drawAnalogKnob(juce::Graphics& g, float cx, float cy, float radius,
                         float sliderPos, float startAngle, float endAngle, juce::Colour accent)
     {
         const float angle = startAngle + sliderPos * (endAngle - startAngle);
         const juce::Colour bright = accent.brighter(0.35f);
 
-        // Sombra bajo la perilla
         g.setColour(juce::Colours::black.withAlpha(0.45f));
         g.fillEllipse(cx - radius, cy - radius + 3.0f, radius * 2.0f, radius * 2.0f);
 
-        // Marcas de escala
         for (int i = 0; i <= 10; ++i)
         {
             const float t = (float) i / 10.0f;
@@ -480,12 +475,10 @@ namespace
                        cx + r2 * std::sin(a), cy - r2 * std::cos(a), 1.5f);
         }
 
-        // Aro metálico (aluminio claro arriba, oscuro abajo)
         g.setGradientFill(juce::ColourGradient(juce::Colour(0xffb4bccd), cx, cy - radius,
                                                juce::Colour(0xff1a1e2c), cx, cy + radius, false));
         g.fillEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
 
-        // Estrías del aro
         for (int i = 0; i < 36; ++i)
         {
             const float a = juce::MathConstants<float>::twoPi * (float) i / 36.0f;
@@ -494,18 +487,15 @@ namespace
                        cx + (radius - 4.0f) * std::sin(a), cy - (radius - 4.0f) * std::cos(a), 0.8f);
         }
 
-        // Borde del aro
         g.setColour(juce::Colour(0xff05060a));
         g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 1.2f);
 
-        // Pista de fondo
         const float trackR = radius - 6.0f;
         juce::Path track;
         track.addCentredArc(cx, cy, trackR, trackR, 0.0f, startAngle, endAngle, true);
         g.setColour(Neon::grid);
         g.strokePath(track, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        // Arco de valor con brillo
         if (sliderPos > 0.001f)
         {
             juce::Path value;
@@ -516,21 +506,17 @@ namespace
             g.strokePath(value, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        // Tapa con degradado radial (más clara en el centro)
         const float capR = radius * 0.66f;
         g.setGradientFill(juce::ColourGradient(juce::Colour(0xff586078), cx - capR * 0.3f, cy - capR * 0.4f,
                                                juce::Colour(0xff080a10), cx + capR, cy + capR, true));
         g.fillEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f);
 
-        // Anillo de acabado de la tapa
         g.setColour(juce::Colour(0xff7d8699).withAlpha(0.6f));
         g.drawEllipse(cx - capR, cy - capR, capR * 2.0f, capR * 2.0f, 1.0f);
 
-        // Reflejo brillante sobre la tapa
         g.setColour(juce::Colours::white.withAlpha(0.18f));
         g.fillEllipse(cx - capR * 0.62f, cy - capR * 0.78f, capR * 0.7f, capR * 0.42f);
 
-        // Puntero: sombra, luego línea blanca y punto de color en la punta
         const float px0 = cx + capR * 0.15f * std::sin(angle);
         const float py0 = cy - capR * 0.15f * std::cos(angle);
         const float px1 = cx + capR * 0.78f * std::sin(angle);
@@ -623,7 +609,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     subtitle.setVisible(false);
     producer.setVisible(false);
 
-    // Presets globales en lista desplegable
     globalPresetBox.addItemList(kGlobalPresetNames, 1);
     globalPresetBox.setTextWhenNothingSelected("Presets...");
     globalPresetBox.setJustificationType(juce::Justification::centred);
@@ -636,7 +621,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     addAndMakeVisible(globalPresetBox);
 
-    // Reverb: el tipo cambia y se aplican sus valores (las perillas se mueven)
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
     presetBox.setJustificationType(juce::Justification::centred);
     presetBox.setSelectedId((int) processor.apvts.getRawParameterValue("rev_preset")->load() + 1,
@@ -664,7 +648,17 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     delayPresetBox.onChange = [this] { applyDelayPresetValues(processor.apvts, delayPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(delayPresetBox);
 
-    // Modos del compresor
+    // Tipo de distorsión (Suave, Cálida, Dura), dentro de DYNAMICS
+    distTypeBox.addItemList(kDistTypes, 1);
+    distTypeBox.setSelectedId((int) processor.apvts.getRawParameterValue("dyn_dist_type")->load() + 1,
+                              juce::dontSendNotification);
+    distTypeBox.setJustificationType(juce::Justification::centredLeft);
+    distTypeBox.onChange = [this] {
+        if (auto* p = processor.apvts.getParameter("dyn_dist_type"))
+            p->setValueNotifyingHost(p->convertTo0to1((float) (distTypeBox.getSelectedId() - 1)));
+    };
+    addAndMakeVisible(distTypeBox);
+
     for (int m = 0; m < 4; ++m)
     {
         compModeBtn[m].setButtonText(kCompModeNames[m]);
@@ -675,6 +669,12 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         };
         addAndMakeVisible(compModeBtn[m]);
     }
+
+    // Botones para agregar y quitar las bandas 5 y 6 del EQ
+    eqAddBtn.onClick = [this] { setEqBandsVisible(eqBandCount + 1); };
+    eqRemoveBtn.onClick = [this] { setEqBandsVisible(eqBandCount - 1); };
+    addAndMakeVisible(eqAddBtn);
+    addAndMakeVisible(eqRemoveBtn);
 
     bypassButton.setClickingTogglesState(true);
     addAndMakeVisible(bypassButton);
@@ -826,6 +826,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     dynDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     tint(dynDrive, Neon::amber);
 
+    setupKnob(dynDistMix, "dyn_dist_mix", "DIST MIX");
+    dynDistMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
+    tint(dynDistMix, Neon::amber);
+
     setupKnob(dynColor, "dyn_color", "COLOR");
     dynColor.slider.textFromValueFunction = [](double v) {
         const double db = (v - 0.5) * 12.0;
@@ -833,11 +837,11 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     tint(dynColor, Neon::amber);
 
-    setupKnob(dynHpFreq, "dyn_hp", "HP FREQ");
+    setupKnob(dynHpFreq, "dyn_hp", "HP");
     dynHpFreq.slider.textFromValueFunction = [](double v) { return juce::String((int) v) + " Hz"; };
     tint(dynHpFreq, Neon::violet);
 
-    setupKnob(dynLpFreq, "dyn_lp", "LP FREQ");
+    setupKnob(dynLpFreq, "dyn_lp", "LP");
     dynLpFreq.slider.textFromValueFunction = [](double v) {
         return v >= 1000.0 ? juce::String(v / 1000.0, 1) + "k" : juce::String((int) v) + " Hz";
     };
@@ -846,6 +850,9 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     setupKnob(dynMix, "dyn_mix", "MIX");
     dynMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     tint(dynMix, Neon::amber);
+
+    // Solo las bandas 1 a 4 empiezan visibles
+    setEqBandsVisible(4);
 
     startTimerHz(30);
 }
@@ -856,13 +863,33 @@ VoxStudioEditor::~VoxStudioEditor()
     setLookAndFeel(nullptr);
 }
 
+// Muestra u oculta las bandas del EQ (4 a 6) y ajusta los botones + y -
+void VoxStudioEditor::setEqBandsVisible(int count)
+{
+    eqBandCount = juce::jlimit(4, VoxStudioProcessor::numEqBands, count);
+
+    for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+    {
+        const bool on = b < eqBandCount;
+        bandTitle[b].setVisible(on);
+        eqFreq[b].slider.setVisible(on);
+        eqFreq[b].label.setVisible(on);
+        eqGain[b].slider.setVisible(on);
+        eqGain[b].label.setVisible(on);
+    }
+
+    eqAddBtn.setVisible(eqBandCount < VoxStudioProcessor::numEqBands);
+    eqRemoveBtn.setVisible(eqBandCount > 4);
+    resized();
+    repaint();
+}
+
 void VoxStudioEditor::setDelayDivision(int index)
 {
     if (auto* p = processor.apvts.getParameter("sfx_delay_div"))
         p->setValueNotifyingHost(p->convertTo0to1((float) index));
 }
 
-// Marca en combos y botones el preset global elegido, sin volver a aplicar valores
 void VoxStudioEditor::syncPresetBoxes(int globalIndex)
 {
     const auto& gp = kGlobalPresets[globalIndex];
@@ -929,10 +956,13 @@ void VoxStudioEditor::timerCallback()
     if ((int) std::round(delayDiv.slider.getValue()) != activeDiv)
         delayDiv.slider.setValue(activeDiv, juce::dontSendNotification);
 
-    // Mantiene el combo de reverb igual al parámetro (por si se cambia desde el host)
     const int revIdx = (int) processor.apvts.getRawParameterValue("rev_preset")->load();
     if (presetBox.getSelectedId() != revIdx + 1)
         presetBox.setSelectedId(revIdx + 1, juce::dontSendNotification);
+
+    const int distIdx = (int) processor.apvts.getRawParameterValue("dyn_dist_type")->load();
+    if (distTypeBox.getSelectedId() != distIdx + 1)
+        distTypeBox.setSelectedId(distIdx + 1, juce::dontSendNotification);
 
     repaint();
 }
@@ -970,7 +1000,7 @@ void VoxStudioEditor::setBandFromPoint(int band, juce::Point<float> p)
 
 int VoxStudioEditor::nodeAt(juce::Point<float> p) const
 {
-    for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+    for (int b = 0; b < eqBandCount; ++b)
     {
         if (nodePosition(b).getDistanceFrom(p) < 12.0f)
             return b;
@@ -991,7 +1021,7 @@ void VoxStudioEditor::mouseDown(const juce::MouseEvent& e)
     {
         int best = 0;
         float bestAbs = 1.0e9f;
-        for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+        for (int b = 0; b < eqBandCount; ++b)
         {
             const float g = std::abs(processor.apvts.getRawParameterValue("eq" + juce::String(b + 1) + "_gain")->load());
             if (g < bestAbs)
@@ -1077,6 +1107,7 @@ void VoxStudioEditor::paint(juce::Graphics& g)
     for (int i = 0; i < 4; ++i)
         drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i], icons[i]);
 
+    // VU con reducción real en dB
     {
         const auto p0 = panelRect(0, w, h);
         drawVuMeter(g, juce::Rectangle<float>((float) p0.getX() + 12.0f, (float) panelTop + 46.0f,
@@ -1139,7 +1170,7 @@ void VoxStudioEditor::paint(juce::Graphics& g)
         const float t = (float) i / (float) points;
         const float freq = 20.0f * std::pow(1000.0f, t);
         float db = 0.0f;
-        for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+        for (int b = 0; b < eqBandCount; ++b)
         {
             const juce::String n = "eq" + juce::String(b + 1) + "_";
             const float f0 = processor.apvts.getRawParameterValue(n + "freq")->load();
@@ -1160,7 +1191,7 @@ void VoxStudioEditor::paint(juce::Graphics& g)
                                            Neon::violet, area.getRight(), 0.0f, false));
     g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-    for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+    for (int b = 0; b < eqBandCount; ++b)
     {
         const auto p = nodePosition(b);
         const float gain = processor.apvts.getRawParameterValue("eq" + juce::String(b + 1) + "_gain")->load();
@@ -1192,7 +1223,7 @@ void VoxStudioEditor::resized()
     globalPresetBox.setBounds(c2.getX(), 18, c3.getX() - c2.getX() - 10, 26);
     bypassButton.setBounds(c3.getX(), 18, c3.getWidth(), 26);
 
-    // COMPRESION: VU arriba, modos, umbral (96), perillas de 62 px y caja GATE
+    // COMPRESION: VU arriba, modos, umbral, perillas y caja GATE
     auto p0 = innerRect(panelRect(0, w, h));
     p0.removeFromTop(88);
     const auto modeRow = cellsOf(p0.removeFromTop(22), 4, 1);
@@ -1211,12 +1242,15 @@ void VoxStudioEditor::resized()
     placeKnob(dynGate,  gateCells[0], 50);
     placeKnob(gateHyst, gateCells[1], 50);
 
+    // EQUALIZADOR: presets, botones + y -, y bandas visibles
     eqPresetBox.setBounds(eqPresetRect(w, h));
+    const auto eqBtns = eqPresetRect(w, h);
+    eqRemoveBtn.setBounds(eqBtns.getRight() - 96, panelTop + 262 + 30, 44, 20);
+    eqAddBtn.setBounds(eqBtns.getRight() - 48, panelTop + 262 + 30, 44, 20);
 
-    // EQ: título BANDA n arriba de cada columna, luego FREQ y GAIN
     const auto bands = eqBandsArea(w, h);
     const auto bandCols = cellsOf(bands, 4, 1);
-    for (int b = 0; b < VoxStudioProcessor::numEqBands; ++b)
+    for (int b = 0; b < VoxStudioProcessor::numEqBands && b < 4; ++b)
     {
         auto col = bandCols[(size_t) b];
         bandTitle[b].setBounds(col.removeFromTop(16));
@@ -1225,7 +1259,7 @@ void VoxStudioEditor::resized()
         placeKnob(eqGain[b], rows[1], 52);
     }
 
-    // REVERB · DELAY: drive, tipo de reverb, reverb (4 perillas), modulación, preset de delay y delay
+    // REVERB · DELAY
     auto p2 = innerRect(panelRect(2, w, h));
     placeKnob(sfxDrive, p2.removeFromTop(88), 80);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
@@ -1255,27 +1289,32 @@ void VoxStudioEditor::resized()
     placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
     placeKnob(delayDry, dlyBot[2].reduced(2, 0), 62);
 
-    // DYNAMICS
+    // DYNAMICS: presets, tipo de distorsión, DE-ESS y FOCUS, DRIVE y DIST MIX, COLOR, HP/LP en una fila y MIX
     auto p3 = innerRect(panelRect(3, w, h));
-    dynPresetBox.setBounds(p3.removeFromTop(30).reduced(4, 4));
-    p3.removeFromTop(8);
+    dynPresetBox.setBounds(p3.removeFromTop(26).reduced(4, 3));
+    p3.removeFromTop(4);
 
-    const auto row1 = cellsOf(p3.removeFromTop(112), 2, 1);
-    placeKnob(dynDeess, row1[0], 80);
-    placeKnob(dynFocus, row1[1], 80);
-    p3.removeFromTop(8);
+    const auto row1 = cellsOf(p3.removeFromTop(104), 2, 1);
+    placeKnob(dynDeess, row1[0], 76);
+    placeKnob(dynFocus, row1[1], 76);
+    p3.removeFromTop(4);
 
-    const auto row2 = cellsOf(p3.removeFromTop(112), 2, 1);
-    placeKnob(dynDrive, row2[0], 72);
-    placeKnob(dynColor, row2[1], 72);
-    p3.removeFromTop(8);
+    distTypeBox.setBounds(p3.removeFromTop(24).reduced(4, 2));
+    p3.removeFromTop(4);
 
-    const auto row3 = cellsOf(p3.removeFromTop(112), 2, 1);
-    placeKnob(dynHpFreq, row3[0], 64);
-    placeKnob(dynLpFreq, row3[1], 64);
-    p3.removeFromTop(8);
+    const auto row2 = cellsOf(p3.removeFromTop(104), 2, 1);
+    placeKnob(dynDrive,   row2[0], 68);
+    placeKnob(dynDistMix, row2[1], 68);
+    p3.removeFromTop(4);
 
-    placeKnob(dynMix, p3, 56);
+    const auto row3 = cellsOf(p3.removeFromTop(96), 2, 1);
+    placeKnob(dynColor, row3[0], 60);
+    const auto hpLp = cellsOf(row3[1], 2, 1);
+    placeKnob(dynHpFreq, hpLp[0], 50);
+    placeKnob(dynLpFreq, hpLp[1], 50);
+    p3.removeFromTop(4);
+
+    placeKnob(dynMix, p3, 52);
 
     inGain.slider.setBounds(pad + 4, h - footerH + 8, 52, 52);
     inGain.label.setBounds(pad + 60, h - footerH + 30, 70, 14);
