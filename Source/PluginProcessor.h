@@ -59,6 +59,7 @@ private:
     void processSFX(juce::AudioBuffer<float>& buffer);
     void processPreDelay(juce::AudioBuffer<float>& buffer);
     void processReverbWithPreDelay(juce::AudioBuffer<float>& buffer);
+    void runFdnReverb(juce::AudioBuffer<float>& buffer);
     void pushSpectrum(const juce::AudioBuffer<float>& buffer);
     double delayTimeMs() const;
 
@@ -69,8 +70,6 @@ private:
     juce::dsp::Gain<float> inputGain;
     juce::dsp::Gain<float> makeupGain;
     juce::dsp::Gain<float> outputGain;
-    juce::Reverb reverb;
-    juce::Reverb::Parameters reverbParams;
 
     using Filter = juce::dsp::IIR::Filter<float>;
     using FilterBand = juce::dsp::ProcessorDuplicator<Filter, juce::dsp::IIR::Coefficients<float>>;
@@ -97,9 +96,16 @@ private:
     juce::AudioBuffer<float> preDelayBuffer;
     int preDelayWritePos = 0;
     juce::AudioBuffer<float> revSendBuffer;
-
-    // LFO de modulación del reverb
     double lfoPhase = 0.0;
+
+    // Reverb propio: red de 8 líneas de retardo con mezcla Hadamard
+    static constexpr int kFdnLines = 8;
+    std::array<std::vector<float>, kFdnLines> fdnBuf;
+    std::array<int, kFdnLines> fdnWrite {};
+    std::array<float, kFdnLines> fdnDamp {};
+    std::array<float, 2> reverbHpState { 0.0f, 0.0f };
+    double lfoPhaseRev = 0.0;
+    int reverbPresetIdx = 0;
 
     // Analizador de espectro (FFT de 2048 muestras)
     juce::dsp::FFT fft { 11 };
