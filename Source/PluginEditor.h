@@ -58,12 +58,11 @@ private:
     juce::Label producer;
 
     juce::ComboBox globalPresetBox;
-
     juce::ComboBox presetBox;
-
     juce::ComboBox eqPresetBox;
     juce::ComboBox dynPresetBox;
     juce::ComboBox delayPresetBox;
+    juce::ComboBox distPresetBox;
     juce::ComboBox distTypeBox;
 
     juce::TextButton compModeBtn[4];
@@ -78,17 +77,26 @@ private:
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
 
     Knob inGain, outGain;
+
+    // Compresor, gate y saturador
     Knob compThreshold, compRatio, compAttack, compRelease, compMakeup;
-    Knob gateHyst;
+    Knob dynGate, gateHyst;
+    Knob satDrive, satWarm, satTone, satOut;
+
+    // EQ
     Knob eqFreq[VoxStudioProcessor::numEqBands];
     Knob eqGain[VoxStudioProcessor::numEqBands];
     Knob eqQ[VoxStudioProcessor::numEqBands];
+
+    // Reverb y delay
     Knob sfxDrive;
-    Knob delayMix, delayDry, delayFb, delayDrv, delayDiv;
-    Knob revRoom, revDecay, revDamp, revMix, revPre;
+    Knob revRoom, revDecay, revDamp, revMix, revPre, revDiff, revEarly;
     Knob modRate, modDepth;
-    Knob dynGate, dynDeess, dynFocus;
-    Knob dynDrive, dynDistMix, dynColor, dynHpFreq, dynLpFreq, dynMix;
+    Knob delayMix, delayDry, delayFb, delayDrv, delayDiv;
+
+    // Dynamics y distorsión
+    Knob dynDeess, dynFocus, dynColor, dynHpFreq, dynLpFreq, dynMix;
+    Knob dynDrive, dynDistMix, dynDistTone, dynDistBias, dynDistOut;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
