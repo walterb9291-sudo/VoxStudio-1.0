@@ -2,6 +2,33 @@
 #include "PluginEditor.h"
 #include <algorithm>
 
+namespace
+{
+    // Retardos base de las 8 líneas del reverb (ms), en proporciones no múltiplas entre sí
+    const float kBaseMs[8] = { 29.7f, 37.1f, 41.1f, 43.7f, 47.9f, 53.3f, 59.9f, 67.7f };
+
+    // Ajustes de carácter por tipo de reverb: tamaño de la red y brillo
+    const float kPresetScale[5]      = { 1.0f, 1.4f, 0.7f, 0.9f, 1.2f };
+    const float kPresetDampOffset[5] = { 0.0f, 0.05f, -0.1f, 0.05f, -0.2f };
+
+    // Transformada Hadamard de 8 puntos, normalizada (conserva la energía)
+    void hadamard8(std::array<float, 8>& v)
+    {
+        for (int len = 1; len < 8; len <<= 1)
+            for (int i = 0; i < 8; i += len << 1)
+                for (int j = i; j < i + len; ++j)
+                {
+                    const float a = v[(size_t) j];
+                    const float b = v[(size_t) (j + len)];
+                    v[(size_t) j] = a + b;
+                    v[(size_t) (j + len)] = a - b;
+                }
+
+        for (auto& x : v)
+            x *= 0.35355339f;
+    }
+}
+
 const juce::StringArray VoxStudioProcessor::reverbPresetNames {
     "Room", "Hall", "Plate", "Vocal Space", "Shimmer Air"
 };
@@ -118,7 +145,6 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     compressor.prepare(spec);
     makeupGain.prepare(spec);
     outputGain.prepare(spec);
-    reverb.setSampleRate(sampleRate);
 
     for (auto& band : eqBands)
         band.prepare(spec);
@@ -139,7 +165,7 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayBuffer.clear();
     delayWritePos = 0;
 
-    // 250 ms: 200 ms de pre-delay más margen para la modulación
+    // Pre-delay: 200 ms más margen para la modulación
     preDelayBuffer.setSize(2, static_cast<int>(sampleRate * 0.25) + 1);
     preDelayBuffer.clear();
     preDelayWritePos = 0;
@@ -147,6 +173,15 @@ void VoxStudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     revSendBuffer.setSize(2, samplesPerBlock);
     revSendBuffer.clear();
+
+    // Reverb propio: cada línea de retardo hasta 0.25 s
+    const int lineMax = static_cast<int>(sampleRate * 0.25) + 64;
+    for (auto& line : fdnBuf)
+        line.assign((size_t) lineMax, 0.0f);
+    fdnWrite.fill(0);
+    fdnDamp.fill(0.0f);
+    reverbHpState = { 0.0f, 0.0f };
+    lfoPhaseRev = 0.0;
 
     gateEnv = 0.0f;
     gateGainSm = 0.0f;
@@ -164,18 +199,10 @@ bool VoxStudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
         && layouts.getMainInputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
+// Solo guarda el tipo de reverb; el carácter (tamaño y brillo) se aplica en runFdnReverb
 void VoxStudioProcessor::applyReverbPreset(int index)
 {
-    switch (index)
-    {
-        case 0: reverbParams = { 0.30f, 0.60f, 1.0f, 0.0f, 0.8f, 0.0f }; break;
-        case 1: reverbParams = { 0.85f, 0.40f, 1.0f, 0.0f, 1.0f, 0.0f }; break;
-        case 2: reverbParams = { 0.60f, 0.20f, 1.0f, 0.0f, 1.0f, 0.0f }; break;
-        case 3: reverbParams = { 0.45f, 0.70f, 1.0f, 0.0f, 0.6f, 0.0f }; break;
-        case 4: reverbParams = { 0.90f, 0.10f, 1.0f, 0.0f, 1.0f, 0.0f }; break;
-        default: break;
-    }
-    reverb.setParameters(reverbParams);
+    reverbPresetIdx = juce::jlimit(0, 4, index);
 }
 
 void VoxStudioProcessor::updateCompressor()
@@ -186,21 +213,9 @@ void VoxStudioProcessor::updateCompressor()
     compressor.setRelease(apvts.getRawParameterValue("comp_release")->load());
 }
 
-// ROOM define el tamaño base y DECAY empuja la cola más larga o más corta
 void VoxStudioProcessor::updateReverb()
 {
     applyReverbPreset(static_cast<int>(apvts.getRawParameterValue("rev_preset")->load()));
-
-    const float room   = apvts.getRawParameterValue("rev_room")->load();
-    const float decay  = apvts.getRawParameterValue("rev_decay")->load();
-    const float decayN = juce::jlimit(0.0f, 1.0f, (decay - 0.1f) / 4.9f);
-
-    reverbParams.roomSize = juce::jlimit(0.0f, 1.0f, room * 0.5f + decayN * 0.5f);
-    reverbParams.damping  = apvts.getRawParameterValue("rev_damp")->load();
-    const float mix = apvts.getRawParameterValue("rev_mix")->load();
-    reverbParams.wetLevel = mix;
-    reverbParams.dryLevel = 1.0f - mix;
-    reverb.setParameters(reverbParams);
 }
 
 void VoxStudioProcessor::updateEq()
@@ -440,8 +455,7 @@ void VoxStudioProcessor::processSFX(juce::AudioBuffer<float>& buffer)
     delayWritePos = (delayWritePos + numSamples) % bufLen;
 }
 
-// Pre-delay con LFO calculado por muestra e interpolación lineal.
-// Así el tiempo cambia suave, sin saltos entre bloques (eso causaba el ruido).
+// Pre-delay con LFO por muestra e interpolación lineal (sin saltos entre bloques)
 void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
 {
     const float ms    = apvts.getRawParameterValue("rev_pre")->load();
@@ -488,19 +502,123 @@ void VoxStudioProcessor::processPreDelay(juce::AudioBuffer<float>& buffer)
     preDelayWritePos = (preDelayWritePos + n) % bufLen;
 }
 
+// Red de 8 líneas de retardo con realimentación Hadamard, filtro de amortiguación y modulación suave.
+// Procesa la señal de entrada como cola 100 % mojada.
+void VoxStudioProcessor::runFdnReverb(juce::AudioBuffer<float>& buffer)
+{
+    const int n = buffer.getNumSamples();
+    if (buffer.getNumChannels() < 2 || n == 0)
+        return;
+
+    const float sr    = (float) currentSampleRate;
+    const float room  = apvts.getRawParameterValue("rev_room")->load();
+    const float decay = juce::jmax(0.1f, apvts.getRawParameterValue("rev_decay")->load());
+    const float damp  = apvts.getRawParameterValue("rev_damp")->load();
+    const float depth = apvts.getRawParameterValue("mod_depth")->load();
+    const float rate  = apvts.getRawParameterValue("mod_rate")->load();
+
+    const int pIdx = juce::jlimit(0, 4, reverbPresetIdx);
+    const float scale = (0.5f + room) * kPresetScale[pIdx];
+    const float dampA = juce::jmap(juce::jlimit(0.0f, 1.0f, damp + kPresetDampOffset[pIdx]),
+                                   0.0f, 1.0f, 0.9f, 0.12f);
+
+    std::array<float, kFdnLines> lenS {};
+    std::array<float, kFdnLines> gains {};
+    for (int i = 0; i < kFdnLines; ++i)
+    {
+        const size_t ui = (size_t) i;
+        const float size = (float) fdnBuf[ui].size();
+        lenS[ui] = juce::jlimit(4.0f, size - 8.0f, kBaseMs[i] * 0.001f * sr * scale);
+        gains[ui] = std::pow(0.001f, lenS[ui] / (decay * sr));
+    }
+
+    const float modAmp = depth * 0.0015f * sr;
+    const float lfoInc = 2.0f * juce::MathConstants<float>::pi * rate / sr;
+    const float twoPi  = 2.0f * juce::MathConstants<float>::pi;
+    const float hpA    = std::exp(-2.0f * juce::MathConstants<float>::pi * 150.0f / sr);
+
+    float* L = buffer.getWritePointer(0);
+    float* R = buffer.getWritePointer(1);
+
+    for (int s = 0; s < n; ++s)
+    {
+        const float inL = L[s];
+        const float inR = R[s];
+
+        // Filtro paso alto de entrada: quita el barro de graves
+        reverbHpState[0] = hpA * reverbHpState[0] + (1.0f - hpA) * inL;
+        reverbHpState[1] = hpA * reverbHpState[1] + (1.0f - hpA) * inR;
+        const float hpL = inL - reverbHpState[0];
+        const float hpR = inR - reverbHpState[1];
+
+        // Lectura de las 8 líneas (con modulación y amortiguación)
+        std::array<float, kFdnLines> taps {};
+        for (int i = 0; i < kFdnLines; ++i)
+        {
+            const size_t ui = (size_t) i;
+            const int size = (int) fdnBuf[ui].size();
+
+            const float mod = modAmp * std::sin(lfoPhaseRev + 0.9f * (float) i);
+            const float d = juce::jlimit(2.0f, (float) size - 4.0f, lenS[ui] + mod);
+            const int di = (int) d;
+            const float frac = d - (float) di;
+
+            int r0 = fdnWrite[ui] - di;
+            if (r0 < 0)
+                r0 += size;
+            int r1 = r0 - 1;
+            if (r1 < 0)
+                r1 += size;
+
+            const float delayed = fdnBuf[ui][(size_t) r0] * (1.0f - frac)
+                                + fdnBuf[ui][(size_t) r1] * frac;
+
+            fdnDamp[ui] += dampA * (delayed - fdnDamp[ui]);
+            taps[ui] = fdnDamp[ui];
+        }
+
+        // Realimentación: mezcla Hadamard de las salidas, con la ganancia de cada línea
+        std::array<float, kFdnLines> mixed = taps;
+        hadamard8(mixed);
+
+        float wetL = 0.0f;
+        float wetR = 0.0f;
+
+        for (int i = 0; i < kFdnLines; ++i)
+        {
+            const size_t ui = (size_t) i;
+            const float in = (i % 2 == 0) ? hpL : hpR;
+            const int size = (int) fdnBuf[ui].size();
+
+            fdnBuf[ui][(size_t) fdnWrite[ui]] = in * 0.3f + mixed[ui] * gains[ui];
+            fdnWrite[ui] = (fdnWrite[ui] + 1) % size;
+
+            if (i % 2 == 0)
+                wetL += taps[ui];
+            else
+                wetR += taps[ui];
+        }
+
+        L[s] = wetL * 0.3f;
+        R[s] = wetR * 0.3f;
+
+        lfoPhaseRev += lfoInc;
+        if (lfoPhaseRev > twoPi)
+            lfoPhaseRev -= twoPi;
+    }
+}
+
+// Reverb con pre-delay: la cola se procesa aparte, así la voz seca no se retrasa
 void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buffer)
 {
     const int n = buffer.getNumSamples();
-    if (buffer.getNumChannels() < 2)
+    if (buffer.getNumChannels() < 2 || n == 0)
         return;
 
     updateReverb();
 
     if (revSendBuffer.getNumSamples() < n)
-    {
-        reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), n);
         return;
-    }
 
     const float mix = apvts.getRawParameterValue("rev_mix")->load();
 
@@ -508,11 +626,7 @@ void VoxStudioProcessor::processReverbWithPreDelay(juce::AudioBuffer<float>& buf
         revSendBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
 
     processPreDelay(revSendBuffer);
-
-    reverbParams.dryLevel = 0.0f;
-    reverbParams.wetLevel = 1.0f;
-    reverb.setParameters(reverbParams);
-    reverb.processStereo(revSendBuffer.getWritePointer(0), revSendBuffer.getWritePointer(1), n);
+    runFdnReverb(revSendBuffer);
 
     for (int ch = 0; ch < 2; ++ch)
     {
