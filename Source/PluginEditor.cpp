@@ -14,6 +14,7 @@ namespace Neon
     const juce::Colour purple  { 0xffa855f7 };
     const juce::Colour pink    { 0xffd946ef };
     const juce::Colour yellow  { 0xffeab308 };
+    const juce::Colour rose    { 0xfff43f5e };
     const juce::Colour text    { 0xfff3f4f6 };
     const juce::Colour label   { 0xffcbd5e1 };
     const juce::Colour muted   { 0xff6b7280 };
@@ -127,28 +128,23 @@ namespace
         }
     }
 
+    // Los presets de DYNAMICS no tocan la distorsión: DRIVE, DIST MIX y el tipo quedan independientes
     void applyDynPresetValues(juce::AudioProcessorValueTreeState& s, int i)
     {
         switch (i)
         {
-            case 0: applyValues(s, { { "dyn_drive", 0.25f }, { "dyn_dist_mix", 0.0f }, { "dyn_color", 0.45f },
-                                     { "dyn_hp", 30.0f }, { "dyn_lp", 16000.0f }, { "dyn_deess", 0.20f },
-                                     { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
-            case 1: applyValues(s, { { "dyn_drive", 0.0f }, { "dyn_dist_mix", 0.0f }, { "dyn_color", 0.50f },
-                                     { "dyn_hp", 60.0f }, { "dyn_lp", 20000.0f }, { "dyn_deess", 0.10f },
-                                     { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
-            case 2: applyValues(s, { { "dyn_drive", 0.50f }, { "dyn_dist_mix", 0.30f }, { "dyn_color", 0.55f },
-                                     { "dyn_hp", 80.0f }, { "dyn_lp", 12000.0f }, { "dyn_deess", 0.30f },
-                                     { "dyn_focus", 0.55f }, { "dyn_mix", 1.0f } }); break;
-            case 3: applyValues(s, { { "dyn_drive", 0.60f }, { "dyn_dist_mix", 0.50f }, { "dyn_color", 0.20f },
-                                     { "dyn_hp", 180.0f }, { "dyn_lp", 4500.0f }, { "dyn_deess", 0.0f },
-                                     { "dyn_focus", 0.50f }, { "dyn_mix", 0.9f } }); break;
-            case 4: applyValues(s, { { "dyn_drive", 0.35f }, { "dyn_dist_mix", 0.20f }, { "dyn_color", 0.40f },
-                                     { "dyn_hp", 50.0f }, { "dyn_lp", 10000.0f }, { "dyn_deess", 0.25f },
-                                     { "dyn_focus", 0.45f }, { "dyn_mix", 1.0f } }); break;
-            default: applyValues(s, { { "dyn_drive", 0.15f }, { "dyn_dist_mix", 0.10f }, { "dyn_color", 0.60f },
-                                      { "dyn_hp", 40.0f }, { "dyn_lp", 20000.0f }, { "dyn_deess", 0.35f },
-                                      { "dyn_focus", 0.60f }, { "dyn_mix", 1.0f } }); break;
+            case 0: applyValues(s, { { "dyn_color", 0.45f }, { "dyn_hp", 30.0f }, { "dyn_lp", 16000.0f },
+                                     { "dyn_deess", 0.20f }, { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
+            case 1: applyValues(s, { { "dyn_color", 0.50f }, { "dyn_hp", 60.0f }, { "dyn_lp", 20000.0f },
+                                     { "dyn_deess", 0.10f }, { "dyn_focus", 0.50f }, { "dyn_mix", 1.0f } }); break;
+            case 2: applyValues(s, { { "dyn_color", 0.55f }, { "dyn_hp", 80.0f }, { "dyn_lp", 12000.0f },
+                                     { "dyn_deess", 0.30f }, { "dyn_focus", 0.55f }, { "dyn_mix", 1.0f } }); break;
+            case 3: applyValues(s, { { "dyn_color", 0.20f }, { "dyn_hp", 180.0f }, { "dyn_lp", 4500.0f },
+                                     { "dyn_deess", 0.0f }, { "dyn_focus", 0.50f }, { "dyn_mix", 0.9f } }); break;
+            case 4: applyValues(s, { { "dyn_color", 0.40f }, { "dyn_hp", 50.0f }, { "dyn_lp", 10000.0f },
+                                     { "dyn_deess", 0.25f }, { "dyn_focus", 0.45f }, { "dyn_mix", 1.0f } }); break;
+            default: applyValues(s, { { "dyn_color", 0.60f }, { "dyn_hp", 40.0f }, { "dyn_lp", 20000.0f },
+                                      { "dyn_deess", 0.35f }, { "dyn_focus", 0.60f }, { "dyn_mix", 1.0f } }); break;
         }
     }
 
@@ -236,12 +232,14 @@ namespace
         return panelRect(1, w, h).toFloat().reduced(12.0f, 0.0f).withTrimmedTop(50.0f).withHeight(200.0f);
     }
 
+    // Fila de presets del EQ (combo a la izquierda, botones + y - a la derecha)
     juce::Rectangle<int> eqPresetRect(int w, int h)
     {
         const auto pr = panelRect(1, w, h);
         return { pr.getX() + 12, panelTop + 262, pr.getWidth() - 24, 28 };
     }
 
+    // Zona de bandas: 2 filas. Con 4 bandas, 2 columnas; con 5 y 6, 3 columnas
     juce::Rectangle<int> eqBandsArea(int w, int h)
     {
         const auto pr = panelRect(1, w, h);
@@ -278,6 +276,31 @@ namespace
 
     juce::Rectangle<int> footerInMeter(int h)         { return { pad + 140, h - footerH + 33, 250, 6 }; }
     juce::Rectangle<int> footerOutMeter(int w, int h) { return { w - 412, h - footerH + 33, 250, 6 }; }
+
+    // Columna DYNAMICS: presets, DE-ESS/FOCUS, cartel DISTORSION, tipo, DRIVE/DIST MIX, COLOR/HP/LP y MIX
+    struct DynRects
+    {
+        juce::Rectangle<int> preset, row1, header, type, row2, row3, mix;
+    };
+
+    DynRects dynRects(int w, int h)
+    {
+        auto p3 = innerRect(panelRect(3, w, h));
+        DynRects r;
+        r.preset = p3.removeFromTop(30).reduced(4, 4);
+        p3.removeFromTop(6);
+        r.row1 = p3.removeFromTop(100);
+        p3.removeFromTop(4);
+        r.header = p3.removeFromTop(16);
+        r.type = p3.removeFromTop(24).reduced(4, 2);
+        p3.removeFromTop(4);
+        r.row2 = p3.removeFromTop(100);
+        p3.removeFromTop(4);
+        r.row3 = p3.removeFromTop(96);
+        p3.removeFromTop(4);
+        r.mix = p3;
+        return r;
+    }
 
     void drawVoiceIcon(juce::Graphics& g, float x, float cy)
     {
@@ -407,7 +430,6 @@ namespace
         }
     }
 
-    // VU grande con la reducción real del compresor (en dB)
     void drawVuMeter(juce::Graphics& g, juce::Rectangle<float> r, float grDb)
     {
         g.setColour(Neon::bg);
@@ -555,14 +577,24 @@ juce::Font NeonLookAndFeel::getComboBoxFont(juce::ComboBox&)
     return juce::Font(juce::FontOptions("Segoe UI", 12.0f, juce::Font::bold));
 }
 
+// El nombre del combo (su componentID) se muestra como cartel a la izquierda
 void NeonLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool,
-                                   int, int, int, int, juce::ComboBox&)
+                                   int, int, int, int, juce::ComboBox& box)
 {
     const auto r = juce::Rectangle<float>(0.0f, 0.0f, (float) width, (float) height);
     g.setColour(Neon::panel);
     g.fillRoundedRectangle(r, 6.0f);
     g.setColour(Neon::sky.withAlpha(0.6f));
     g.drawRoundedRectangle(r.reduced(0.5f), 6.0f, 1.0f);
+
+    const juce::String caption = box.getComponentID();
+    if (caption.isNotEmpty())
+    {
+        g.setColour(box.findColour(juce::ComboBox::arrowColourId));
+        g.setFont(juce::FontOptions("Segoe UI", 8.5f, juce::Font::bold));
+        g.drawText(caption, juce::Rectangle<int>(8, 0, width / 2, height),
+                   juce::Justification::centredLeft, false);
+    }
 
     juce::Path arrow;
     arrow.startNewSubPath(width - 14.0f, height * 0.44f);
@@ -609,9 +641,12 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     subtitle.setVisible(false);
     producer.setVisible(false);
 
+    // Combos con cartel: el componentID es el texto del cartel y el arrowColour su color
+    globalPresetBox.setComponentID("PRESET GLOBAL");
+    globalPresetBox.setColour(juce::ComboBox::arrowColourId, Neon::sky);
     globalPresetBox.addItemList(kGlobalPresetNames, 1);
     globalPresetBox.setTextWhenNothingSelected("Presets...");
-    globalPresetBox.setJustificationType(juce::Justification::centred);
+    globalPresetBox.setJustificationType(juce::Justification::centredRight);
     globalPresetBox.onChange = [this] {
         const int id = globalPresetBox.getSelectedId();
         if (id <= 0)
@@ -621,8 +656,10 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     addAndMakeVisible(globalPresetBox);
 
+    presetBox.setComponentID("TIPO REVERB");
+    presetBox.setColour(juce::ComboBox::arrowColourId, Neon::pink);
     presetBox.addItemList(VoxStudioProcessor::reverbPresetNames, 1);
-    presetBox.setJustificationType(juce::Justification::centred);
+    presetBox.setJustificationType(juce::Justification::centredRight);
     presetBox.setSelectedId((int) processor.apvts.getRawParameterValue("rev_preset")->load() + 1,
                             juce::dontSendNotification);
     presetBox.onChange = [this] {
@@ -630,29 +667,36 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     addAndMakeVisible(presetBox);
 
+    eqPresetBox.setComponentID("EQ");
+    eqPresetBox.setColour(juce::ComboBox::arrowColourId, Neon::mint);
     eqPresetBox.addItemList(kEqPresets, 1);
     eqPresetBox.setSelectedId(1, juce::dontSendNotification);
-    eqPresetBox.setJustificationType(juce::Justification::centred);
+    eqPresetBox.setJustificationType(juce::Justification::centredRight);
     eqPresetBox.onChange = [this] { applyEqPreset(processor.apvts, eqPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(eqPresetBox);
 
+    dynPresetBox.setComponentID("DYNAMICS");
+    dynPresetBox.setColour(juce::ComboBox::arrowColourId, Neon::amber);
     dynPresetBox.addItemList(kDynPresets, 1);
     dynPresetBox.setSelectedId(1, juce::dontSendNotification);
-    dynPresetBox.setJustificationType(juce::Justification::centredLeft);
+    dynPresetBox.setJustificationType(juce::Justification::centredRight);
     dynPresetBox.onChange = [this] { applyDynPresetValues(processor.apvts, dynPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(dynPresetBox);
 
+    delayPresetBox.setComponentID("DELAY");
+    delayPresetBox.setColour(juce::ComboBox::arrowColourId, Neon::pink);
     delayPresetBox.addItemList(kDelayPresets, 1);
     delayPresetBox.setSelectedId(1, juce::dontSendNotification);
-    delayPresetBox.setJustificationType(juce::Justification::centredLeft);
+    delayPresetBox.setJustificationType(juce::Justification::centredRight);
     delayPresetBox.onChange = [this] { applyDelayPresetValues(processor.apvts, delayPresetBox.getSelectedId() - 1); };
     addAndMakeVisible(delayPresetBox);
 
-    // Tipo de distorsión (Suave, Cálida, Dura), dentro de DYNAMICS
+    distTypeBox.setComponentID("TIPO");
+    distTypeBox.setColour(juce::ComboBox::arrowColourId, Neon::rose);
     distTypeBox.addItemList(kDistTypes, 1);
     distTypeBox.setSelectedId((int) processor.apvts.getRawParameterValue("dyn_dist_type")->load() + 1,
                               juce::dontSendNotification);
-    distTypeBox.setJustificationType(juce::Justification::centredLeft);
+    distTypeBox.setJustificationType(juce::Justification::centredRight);
     distTypeBox.onChange = [this] {
         if (auto* p = processor.apvts.getParameter("dyn_dist_type"))
             p->setValueNotifyingHost(p->convertTo0to1((float) (distTypeBox.getSelectedId() - 1)));
@@ -670,7 +714,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
         addAndMakeVisible(compModeBtn[m]);
     }
 
-    // Botones para agregar y quitar las bandas 5 y 6 del EQ
     eqAddBtn.onClick = [this] { setEqBandsVisible(eqBandCount + 1); };
     eqRemoveBtn.onClick = [this] { setEqBandsVisible(eqBandCount - 1); };
     addAndMakeVisible(eqAddBtn);
@@ -822,13 +865,14 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     };
     tint(dynFocus, Neon::amber);
 
+    // DISTORSION (rosa): DRIVE y DIST MIX
     setupKnob(dynDrive, "dyn_drive", "DRIVE");
     dynDrive.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
-    tint(dynDrive, Neon::amber);
+    tint(dynDrive, Neon::rose);
 
     setupKnob(dynDistMix, "dyn_dist_mix", "DIST MIX");
     dynDistMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
-    tint(dynDistMix, Neon::amber);
+    tint(dynDistMix, Neon::rose);
 
     setupKnob(dynColor, "dyn_color", "COLOR");
     dynColor.slider.textFromValueFunction = [](double v) {
@@ -851,7 +895,6 @@ VoxStudioEditor::VoxStudioEditor(VoxStudioProcessor& p)
     dynMix.slider.textFromValueFunction = [](double v) { return juce::String(v * 100.0, 0) + "%"; };
     tint(dynMix, Neon::amber);
 
-    // Solo las bandas 1 a 4 empiezan visibles
     setEqBandsVisible(4);
 
     startTimerHz(30);
@@ -1107,7 +1150,16 @@ void VoxStudioEditor::paint(juce::Graphics& g)
     for (int i = 0; i < 4; ++i)
         drawPanel(g, panelRect(i, w, h).toFloat(), names[i], accents[i], icons[i]);
 
-    // VU con reducción real en dB
+    // Cartel DISTORSION dentro de DYNAMICS
+    {
+        const auto hr = dynRects(w, h).header;
+        g.setColour(Neon::rose);
+        g.setFont(juce::FontOptions("Segoe UI", 9.5f, juce::Font::bold));
+        g.drawText("DISTORSION", hr.reduced(4, 0), juce::Justification::centredLeft, false);
+        g.setColour(Neon::rose.withAlpha(0.6f));
+        g.fillRect(hr.getX(), hr.getBottom() - 1, hr.getWidth(), 1);
+    }
+
     {
         const auto p0 = panelRect(0, w, h);
         drawVuMeter(g, juce::Rectangle<float>((float) p0.getX() + 12.0f, (float) panelTop + 46.0f,
@@ -1242,34 +1294,38 @@ void VoxStudioEditor::resized()
     placeKnob(dynGate,  gateCells[0], 50);
     placeKnob(gateHyst, gateCells[1], 50);
 
-    // EQUALIZADOR: presets, botones + y -, y bandas visibles
-    eqPresetBox.setBounds(eqPresetRect(w, h));
-    const auto eqBtns = eqPresetRect(w, h);
-    eqRemoveBtn.setBounds(eqBtns.getRight() - 96, panelTop + 262 + 30, 44, 20);
-    eqAddBtn.setBounds(eqBtns.getRight() - 48, panelTop + 262 + 30, 44, 20);
+    // EQUALIZADOR: presets a la izquierda y botones + y - a la derecha
+    const auto eqRow = eqPresetRect(w, h);
+    eqPresetBox.setBounds(eqRow.withWidth(eqRow.getWidth() - 100));
+    eqRemoveBtn.setBounds(eqRow.getRight() - 92, eqRow.getY() + 4, 40, 20);
+    eqAddBtn.setBounds(eqRow.getRight() - 46, eqRow.getY() + 4, 40, 20);
 
+    // Bandas en 2 filas: con 4 bandas, 2 columnas; con 5 y 6, 3 columnas.
+    // Cada banda: título, FREQ y GAIN lado a lado.
     const auto bands = eqBandsArea(w, h);
-    const auto bandCols = cellsOf(bands, 4, 1);
-    for (int b = 0; b < VoxStudioProcessor::numEqBands && b < 4; ++b)
+    const int cols = eqBandCount > 4 ? 3 : 2;
+    const auto bandCells = cellsOf(bands, cols, 2);
+    const int knobSize = eqBandCount > 4 ? 30 : 42;
+    for (int b = 0; b < eqBandCount; ++b)
     {
-        auto col = bandCols[(size_t) b];
-        bandTitle[b].setBounds(col.removeFromTop(16));
-        const auto rows = cellsOf(col, 1, 2);
-        placeKnob(eqFreq[b], rows[0], 52);
-        placeKnob(eqGain[b], rows[1], 52);
+        auto cell = bandCells[(size_t) b].reduced(2, 0);
+        bandTitle[b].setBounds(cell.removeFromTop(14));
+        const auto halves = cellsOf(cell, 2, 1);
+        placeKnob(eqFreq[b], halves[0], knobSize);
+        placeKnob(eqGain[b], halves[1], knobSize);
     }
 
     // REVERB · DELAY
     auto p2 = innerRect(panelRect(2, w, h));
-    placeKnob(sfxDrive, p2.removeFromTop(88), 80);
+    placeKnob(sfxDrive, p2.removeFromTop(96), 84);
     presetBox.setBounds(p2.removeFromTop(30).reduced(4, 4));
     p2.removeFromTop(6);
 
-    const auto revCells = cellsOf(p2.removeFromTop(80), 4, 1);
-    placeKnob(revRoom,  revCells[0].reduced(2, 0), 44);
-    placeKnob(revDecay, revCells[1].reduced(2, 0), 44);
-    placeKnob(revMix,   revCells[2].reduced(2, 0), 44);
-    placeKnob(revPre,   revCells[3].reduced(2, 0), 44);
+    const auto revCells = cellsOf(p2.removeFromTop(84), 4, 1);
+    placeKnob(revRoom,  revCells[0].reduced(2, 0), 46);
+    placeKnob(revDecay, revCells[1].reduced(2, 0), 46);
+    placeKnob(revMix,   revCells[2].reduced(2, 0), 46);
+    placeKnob(revPre,   revCells[3].reduced(2, 0), 46);
     p2.removeFromTop(6);
 
     const auto modCells = cellsOf(p2.removeFromTop(58), 2, 1);
@@ -1289,32 +1345,27 @@ void VoxStudioEditor::resized()
     placeKnob(delayMix, dlyBot[1].reduced(2, 0), 44);
     placeKnob(delayDry, dlyBot[2].reduced(2, 0), 62);
 
-    // DYNAMICS: presets, tipo de distorsión, DE-ESS y FOCUS, DRIVE y DIST MIX, COLOR, HP/LP en una fila y MIX
-    auto p3 = innerRect(panelRect(3, w, h));
-    dynPresetBox.setBounds(p3.removeFromTop(26).reduced(4, 3));
-    p3.removeFromTop(4);
+    // DYNAMICS
+    const auto d = dynRects(w, h);
+    dynPresetBox.setBounds(d.preset);
 
-    const auto row1 = cellsOf(p3.removeFromTop(104), 2, 1);
-    placeKnob(dynDeess, row1[0], 76);
-    placeKnob(dynFocus, row1[1], 76);
-    p3.removeFromTop(4);
+    const auto row1c = cellsOf(d.row1, 2, 1);
+    placeKnob(dynDeess, row1c[0], 76);
+    placeKnob(dynFocus, row1c[1], 76);
 
-    distTypeBox.setBounds(p3.removeFromTop(24).reduced(4, 2));
-    p3.removeFromTop(4);
+    distTypeBox.setBounds(d.type);
 
-    const auto row2 = cellsOf(p3.removeFromTop(104), 2, 1);
-    placeKnob(dynDrive,   row2[0], 68);
-    placeKnob(dynDistMix, row2[1], 68);
-    p3.removeFromTop(4);
+    const auto row2c = cellsOf(d.row2, 2, 1);
+    placeKnob(dynDrive,   row2c[0], 68);
+    placeKnob(dynDistMix, row2c[1], 68);
 
-    const auto row3 = cellsOf(p3.removeFromTop(96), 2, 1);
-    placeKnob(dynColor, row3[0], 60);
-    const auto hpLp = cellsOf(row3[1], 2, 1);
+    const auto row3c = cellsOf(d.row3, 2, 1);
+    placeKnob(dynColor, row3c[0], 60);
+    const auto hpLp = cellsOf(row3c[1], 2, 1);
     placeKnob(dynHpFreq, hpLp[0], 50);
     placeKnob(dynLpFreq, hpLp[1], 50);
-    p3.removeFromTop(4);
 
-    placeKnob(dynMix, p3, 52);
+    placeKnob(dynMix, d.mix, 52);
 
     inGain.slider.setBounds(pad + 4, h - footerH + 8, 52, 52);
     inGain.label.setBounds(pad + 60, h - footerH + 30, 70, 14);
