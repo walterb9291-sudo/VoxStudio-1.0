@@ -44,6 +44,7 @@ private:
     void setDelayDivision(int index);
     void syncPresetBoxes(int globalIndex);
     void highlightCompMode(int mode);
+    void setEqBandsVisible(int count);
     juce::Rectangle<float> eqArea() const;
     juce::Point<float> nodePosition(int band) const;
     void setBandFromPoint(int band, juce::Point<float> p);
@@ -63,8 +64,13 @@ private:
     juce::ComboBox eqPresetBox;
     juce::ComboBox dynPresetBox;
     juce::ComboBox delayPresetBox;
+    juce::ComboBox distTypeBox;
 
     juce::TextButton compModeBtn[4];
+
+    juce::TextButton eqAddBtn { "+" };
+    juce::TextButton eqRemoveBtn { "-" };
+    int eqBandCount = 4;
 
     juce::Label bandTitle[VoxStudioProcessor::numEqBands];
 
@@ -82,7 +88,7 @@ private:
     Knob revRoom, revDecay, revDamp, revMix, revPre;
     Knob modRate, modDepth;
     Knob dynGate, dynDeess, dynFocus;
-    Knob dynDrive, dynColor, dynHpFreq, dynLpFreq, dynMix;
+    Knob dynDrive, dynDistMix, dynColor, dynHpFreq, dynLpFreq, dynMix;
 
     int draggingBand = -1;
     float inLevel = 0.0f;
