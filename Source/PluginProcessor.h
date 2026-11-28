@@ -33,7 +33,6 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
-    void applyReverbPreset(int index);
     static const juce::StringArray reverbPresetNames;
     static const juce::StringArray delayDivisionNames;
     static const juce::StringArray distTypeNames;
@@ -50,13 +49,13 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     void updateCompressor();
-    void updateReverb();
     void updateEq();
     void updateDeEsser();
     void updateDynFilters();
     void processDynamics(juce::AudioBuffer<float>& buffer);
     void processDeEsser(juce::AudioBuffer<float>& buffer);
     void processDynModule(juce::AudioBuffer<float>& buffer);
+    void processSaturator(juce::AudioBuffer<float>& buffer);
     void processSFX(juce::AudioBuffer<float>& buffer);
     void processPreDelay(juce::AudioBuffer<float>& buffer);
     void processReverbWithPreDelay(juce::AudioBuffer<float>& buffer);
@@ -82,6 +81,11 @@ private:
     FilterBand dynLpBand;
     juce::AudioBuffer<float> dynDryBuffer;
 
+    // Estados de distorsión y saturador
+    float distToneState[2] { 0.0f, 0.0f };
+    float satLpState[2] { 0.0f, 0.0f };
+    float satToneState[2] { 0.0f, 0.0f };
+
     float gateEnv = 0.0f;
     float gateGainSm = 0.0f;
     bool gateOpenState = false;
@@ -89,8 +93,9 @@ private:
     float deEsserEnv = 0.0f;
     juce::AudioBuffer<float> sideBuffer;
 
-    // Detector de reducción real del compresor (ballistics propios, en dB)
-    float compEnvDb = -100.0f;
+    // Compresor: copia de la entrada para medir la reducción real
+    juce::AudioBuffer<float> compInBuffer;
+    float compEnvDb = 0.0f;
 
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
@@ -100,13 +105,17 @@ private:
     juce::AudioBuffer<float> revSendBuffer;
     double lfoPhase = 0.0;
 
+    // Reverb: difusión, reflexiones tempranas y red de 8 líneas
     static constexpr int kFdnLines = 8;
     std::array<std::vector<float>, kFdnLines> fdnBuf;
     std::array<int, kFdnLines> fdnWrite {};
     std::array<float, kFdnLines> fdnDamp {};
+    std::array<std::vector<float>, 4> apBuf;
+    std::array<int, 4> apIdx {};
+    std::vector<float> earlyBuf;
+    int earlyIdx = 0;
     std::array<float, 2> reverbHpState { 0.0f, 0.0f };
     double lfoPhaseRev = 0.0;
-    int reverbPresetIdx = 0;
 
     juce::dsp::FFT fft { 11 };
     juce::dsp::WindowingFunction<float> fftWindow { 2048, juce::dsp::WindowingFunction<float>::hann };
