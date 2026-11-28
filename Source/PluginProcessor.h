@@ -36,7 +36,8 @@ public:
     void applyReverbPreset(int index);
     static const juce::StringArray reverbPresetNames;
     static const juce::StringArray delayDivisionNames;
-    static constexpr int numEqBands = 4;
+    static const juce::StringArray distTypeNames;
+    static constexpr int numEqBands = 6;
     static constexpr int numSpecBands = 64;
 
     float getInputLevel() const { return inputLevel.load(); }
@@ -76,7 +77,6 @@ private:
     std::array<FilterBand, numEqBands> eqBands;
     FilterBand deEsserBand;
 
-    // Módulo DYNAMICS: color (shelf), paso alto y paso bajo
     FilterBand dynColorBand;
     FilterBand dynHpBand;
     FilterBand dynLpBand;
@@ -89,16 +89,17 @@ private:
     float deEsserEnv = 0.0f;
     juce::AudioBuffer<float> sideBuffer;
 
+    // Detector de reducción real del compresor (ballistics propios, en dB)
+    float compEnvDb = -100.0f;
+
     juce::AudioBuffer<float> delayBuffer;
     int delayWritePos = 0;
 
-    // Pre-delay del reverb (hasta 200 ms + modulación) y copia de trabajo para la cola
     juce::AudioBuffer<float> preDelayBuffer;
     int preDelayWritePos = 0;
     juce::AudioBuffer<float> revSendBuffer;
     double lfoPhase = 0.0;
 
-    // Reverb propio: red de 8 líneas de retardo con mezcla Hadamard
     static constexpr int kFdnLines = 8;
     std::array<std::vector<float>, kFdnLines> fdnBuf;
     std::array<int, kFdnLines> fdnWrite {};
@@ -107,7 +108,6 @@ private:
     double lfoPhaseRev = 0.0;
     int reverbPresetIdx = 0;
 
-    // Analizador de espectro (FFT de 2048 muestras)
     juce::dsp::FFT fft { 11 };
     juce::dsp::WindowingFunction<float> fftWindow { 2048, juce::dsp::WindowingFunction<float>::hann };
     std::array<float, 4096> fftBuffer {};
